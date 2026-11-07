@@ -1,0 +1,922 @@
+/* PureBlack: most colors live in color.ini. theme.js retints them from the
+   real sky (time of day and weather) through the --spice-* and --pb-*
+   variables; the fallbacks below are the night purple. */
+.encore-dark-theme,
+.encore-dark-theme .encore-base-set {
+  --background-elevated-press: var(--pb-surface-press, #0b0715);
+  /* Chips and tinted buttons: a colored wash that lands near the surface
+     color on black. */
+  --background-tinted-base: rgba(var(--pb-tint-rgb, 130, 85, 240), 0.085);
+  --background-tinted-highlight: rgba(var(--pb-tint-rgb, 130, 85, 240), 0.125);
+  --background-tinted-press: rgba(var(--pb-tint-rgb, 130, 85, 240), 0.17);
+  --decorative-subdued: var(--pb-surface-hover, #1a1030);
+  /* Accent text and icons stay lighter than the accent fills so they read
+     on black. */
+  --text-bright-accent: var(--pb-text, #a782f2);
+  --text-positive: var(--pb-text, #a782f2);
+  --essential-bright-accent: var(--pb-text, #a782f2);
+  --essential-positive: var(--pb-text, #a782f2);
+}
+.main-addButton-button.main-addButton-active {
+  color: var(--pb-text, #a782f2);
+}
+.main-addButton-button.main-addButton-active:hover,
+.main-addButton-button.main-addButton-active:focus {
+  color: var(--pb-text-hover, #bba0f5);
+}
+/* Track rows hover with a hardcoded 10% white; use the tinted hover instead. */
+.main-trackList-trackListRow:hover,
+.main-trackList-trackListRow:focus-within {
+  background-color: var(--pb-surface-hover, #1a1030);
+}
+
+/* Accent fills. color.ini covers most greens; these are Spotify's hardcoded
+   hover/press shades of green. */
+.encore-dark-theme .encore-bright-accent-set,
+.encore-dark-theme .encore-positive-set {
+  --background-highlight: var(--pb-hover, #7b47d9);
+  --background-elevated-base: var(--pb-hover, #7b47d9);
+  --background-elevated-highlight: var(--pb-hover, #7b47d9);
+  --background-press: var(--pb-press, #4f269a);
+  --background-elevated-press: var(--pb-press, #4f269a);
+  --decorative-subdued: var(--pb-press, #4f269a);
+  /* Icons and text on the fill: white on dark fills, black on bright ones. */
+  --text-base: var(--pb-on-fill, #ffffff);
+  --text-subdued: var(--pb-on-fill, #ffffff);
+  --text-bright-accent: var(--pb-on-fill, #ffffff);
+  --text-positive: var(--pb-on-fill, #ffffff);
+  --essential-base: var(--pb-on-fill, #ffffff);
+  --essential-subdued: var(--pb-on-fill, #ffffff);
+  --essential-bright-accent: var(--pb-on-fill, #ffffff);
+  --essential-positive: var(--pb-on-fill, #ffffff);
+}
+.ArfgeCwaM5Ix1GGsbP8t,
+.mmH1doeSVASHSyiV0C85,
+.P8xkVC04M3zY15LJ0B7O {
+  color: var(--pb-on-fill, #ffffff);
+}
+.mmH1doeSVASHSyiV0C85:active,
+.ArfgeCwaM5Ix1GGsbP8t:active {
+  background-color: var(--pb-press, #4f269a);
+}
+.MKFJGfPCySuartS1MoA4 .o0vUBVdxi5tQBM6yNsFT:hover {
+  background: rgba(var(--spice-rgb-button-active), 0.08);
+}
+.MKFJGfPCySuartS1MoA4 .o0vUBVdxi5tQBM6yNsFT:active {
+  background: rgba(var(--spice-rgb-button-active), 0.12);
+}
+.dtw1mPdl2F5p35UH8bWt {
+  background: radial-gradient(82.95% 283.44% at 50% -160.29%, rgba(var(--spice-rgb-button-active), 0.3) 0%, var(--gradient-color-bottom) 100%);
+}
+
+/* Home header: Spotify tints it with the hovered shortcut's color. Pin it to
+   a dark tint of the accent instead; Spotify's own black fade sits on top. */
+.h1AjDPMDbQn9UTUl6owY {
+  background-color: var(--pb-glow, #2a1650) !important;
+}
+
+/* The now-playing equalizer is a green image, so shift its hue to the accent. */
+img[src*="equaliser-animated-green"],
+img[src*="equaliser-green"] {
+  filter: var(--pb-eq-filter, hue-rotate(125deg) saturate(1.2) brightness(0.95));
+}
+
+/* ------------------------------------------------------------------------
+   Liquid glass. Floating pieces (top bar, playbar, search, menus) are liquid
+   glass: frosted and tinted, with a specular rim that's brightest at the
+   top-left and bottom-right corners, a lit top edge and a shaded bottom edge.
+   The top bar holds the live sky. The panels stay pure black, with the sky's
+   color washing into their tops, their top edges reflecting it, and the
+   weather playing on their glass.
+   ------------------------------------------------------------------------ */
+:root {
+  /* One radius scale: outer surfaces (panels, top bar, playbar), inner
+     surfaces (tiles, cards, menus), artwork. Buttons, chips and the search
+     bar stay fully round. */
+  --pb-radius-outer: 14px;
+  --pb-radius-inner: 8px;
+  --pb-radius-art: 6px;
+  /* The sky, as theme.js last saw it (night fallbacks). */
+  --pb-sky-top: 15, 12, 36;
+  --pb-sky-bottom: 74, 82, 114;
+  --pb-sky-lit: 74, 82, 114;
+  /* Hover surface: a plain neutral lift; the sky wash drawn over each panel
+     tints it near the top. */
+  --pb-lit: linear-gradient(rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.075));
+  --pb-accent-rgb: var(--spice-rgb-button-active);
+  --pb-glass-blur: blur(24px) saturate(150%);
+  /* Frosted fill: light catches the top-left, then a faint accent tint. */
+  --pb-glass-fill:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.11) 0%, rgba(255, 255, 255, 0.035) 38%,
+      rgba(255, 255, 255, 0.02) 62%, rgba(255, 255, 255, 0.06) 100%),
+    linear-gradient(rgba(var(--pb-accent-rgb), 0.05), rgba(var(--pb-accent-rgb), 0.05));
+  /* Specular rim, drawn as a 1px masked ring. */
+  --pb-glass-rim:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.07) 20%,
+      rgba(255, 255, 255, 0.015) 45%, rgba(255, 255, 255, 0.015) 60%,
+      rgba(255, 255, 255, 0.07) 82%, rgba(255, 255, 255, 0.18));
+  /* Depth: lit top edge, shaded bottom edge, inner glow, soft float shadow. */
+  --pb-glass-depth:
+    inset 0 1px 1px rgba(255, 255, 255, 0.12),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.35),
+    inset 0 0 24px rgba(255, 255, 255, 0.04),
+    0 12px 32px rgba(0, 0, 0, 0.5),
+    0 2px 6px rgba(0, 0, 0, 0.35);
+  /* Same depth without the float shadow, for things inside a glass bar. */
+  --pb-glass-depth-flat:
+    inset 0 1px 1px rgba(255, 255, 255, 0.22),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.3),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/* Backdrop: plain black between the panels. */
+.PbMBx95owTmQYYdfnp3j {
+  background: #000;
+}
+.EmXZMILXH0bP7U461Va6,
+.G0r21Xb5HbCgpzJwqiev {
+  background-color: transparent;
+}
+
+/* Panels: the sky's color washes down into the top of each, the way Spotify
+   tints a playlist header from its cover, and the top edge reflects the sky.
+   Drawn over the content and screen-blended (the content paints solid
+   black), so text and artwork stay as they are. The side panels take a
+   lighter wash. */
+#Desktop_LeftSidebar_Id::after,
+.BPRPH_jrStQIw2m2qfDl::after,
+.dMf_PkfPVTEuSmc11MZp::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  border-radius: var(--pb-radius-outer);
+  background: linear-gradient(rgba(var(--pb-sky-bottom), calc(0.55 * var(--pb-wash, 1))),
+    rgba(var(--pb-sky-top), calc(0.3 * var(--pb-wash, 1))) 150px,
+    rgba(var(--pb-sky-top), calc(0.08 * var(--pb-wash, 1))) 300px, transparent 420px);
+  box-shadow:
+    inset 0 1px 0 rgba(var(--pb-sky-lit), 0.5),
+    inset 0 0 0 1px rgba(var(--pb-sky-lit), 0.07);
+  mix-blend-mode: screen;
+}
+#Desktop_LeftSidebar_Id,
+.dMf_PkfPVTEuSmc11MZp {
+  --pb-wash: 0.6;
+}
+
+/* Weather on the glass (theme.js builds one .pb-glass in each panel and the
+   playbar, above the content). Everything in it only moves or fades. */
+.pb-glass {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  overflow: hidden;
+  border-radius: var(--pb-radius-outer);
+  pointer-events: none;
+  contain: strict;
+}
+.pb-glass > * {
+  position: absolute;
+  pointer-events: none;
+}
+
+/* Rain: two sets of beads that gather and dry in turn, so new drops keep
+   arriving, and drops that run down in fits and starts, leaving a wet
+   trail. */
+.pbg-beads {
+  inset: 0;
+  opacity: 0;
+  background-size: 420px 420px;
+  animation: pbg-beads 20s linear infinite;
+  -webkit-mask-image: linear-gradient(#000, rgba(0, 0, 0, 0.6) 50%, rgba(0, 0, 0, 0.3));
+  mask-image: linear-gradient(#000, rgba(0, 0, 0, 0.6) 50%, rgba(0, 0, 0, 0.3));
+}
+@keyframes pbg-beads {
+  0% { opacity: 0; }
+  15% { opacity: var(--pb-wet); }
+  55% { opacity: var(--pb-wet); }
+  100% { opacity: 0; }
+}
+.pbg-lane {
+  overflow: hidden;
+}
+.pbg-runner {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  animation: pbg-run 10s linear forwards;
+}
+.pbg-runner.pbg-alt {
+  animation-name: pbg-run-alt;
+}
+.pbg-runner b {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: var(--h);
+  background: var(--pb-drop-img) center / 100% 100% no-repeat;
+}
+.pbg-runner i {
+  position: absolute;
+  left: 36%;
+  width: 28%;
+  top: calc(var(--h) * 0.5 - var(--dist));
+  height: var(--dist);
+  border-radius: 999px;
+  background: linear-gradient(rgba(225, 235, 255, 0), rgba(225, 235, 255, 0.04) 45%, rgba(225, 235, 255, 0.2) 92%, rgba(225, 235, 255, 0.05));
+}
+@keyframes pbg-run {
+  0% { transform: translateY(0); opacity: 0; }
+  6% { transform: translateY(0); opacity: 1; }
+  22% { transform: translateY(calc(var(--dist) * 0.05)); animation-timing-function: ease-in; }
+  30% { transform: translateY(calc(var(--dist) * 0.3)); animation-timing-function: ease-out; }
+  34% { transform: translateY(calc(var(--dist) * 0.33)); }
+  52% { transform: translateY(calc(var(--dist) * 0.36)); animation-timing-function: ease-in; }
+  62% { transform: translateY(calc(var(--dist) * 0.82)); animation-timing-function: ease-out; }
+  66% { transform: translateY(calc(var(--dist) * 0.85)); }
+  80% { transform: translateY(var(--dist)); opacity: 1; }
+  100% { transform: translateY(var(--dist)); opacity: 0; }
+}
+@keyframes pbg-run-alt {
+  0% { transform: translateY(0); opacity: 0; }
+  5% { opacity: 1; }
+  40% { transform: translateY(calc(var(--dist) * 0.08)); animation-timing-function: ease-in; }
+  58% { transform: translateY(calc(var(--dist) * 0.7)); animation-timing-function: ease-out; }
+  64% { transform: translateY(calc(var(--dist) * 0.74)); }
+  72% { transform: translateY(calc(var(--dist) * 0.76)); animation-timing-function: ease-in; }
+  78% { transform: translateY(var(--dist)); opacity: 1; }
+  100% { transform: translateY(var(--dist)); opacity: 0; }
+}
+
+/* Snow: flakes drift down past the glass at two depths, swaying, and frost
+   at the corners slowly brightens and fades. */
+.pbg-frost {
+  inset: 0;
+  background-size: 420px 420px;
+  animation: pbg-breathe 9s ease-in-out infinite alternate;
+  -webkit-mask-image: radial-gradient(260px 200px at 0 0, #000, transparent), radial-gradient(260px 200px at 100% 0, #000, transparent),
+    radial-gradient(200px 140px at 0 100%, rgba(0, 0, 0, 0.6), transparent), radial-gradient(200px 140px at 100% 100%, rgba(0, 0, 0, 0.6), transparent);
+  mask-image: radial-gradient(260px 200px at 0 0, #000, transparent), radial-gradient(260px 200px at 100% 0, #000, transparent),
+    radial-gradient(200px 140px at 0 100%, rgba(0, 0, 0, 0.6), transparent), radial-gradient(200px 140px at 100% 100%, rgba(0, 0, 0, 0.6), transparent);
+}
+@keyframes pbg-breathe {
+  from { opacity: 0.6; }
+  to { opacity: 1; }
+}
+.pbg-sway {
+  inset: 0;
+  animation: pbs-sway ease-in-out infinite alternate;
+  -webkit-mask-image: linear-gradient(#000, rgba(0, 0, 0, 0.45));
+  mask-image: linear-gradient(#000, rgba(0, 0, 0, 0.45));
+}
+.pbg-flakes {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -512px;
+  bottom: 0;
+  background-size: 512px 512px;
+  animation: pbg-down linear infinite;
+}
+@keyframes pbg-down {
+  to { transform: translateY(512px); }
+}
+
+/* Sun: a glint sweeps across the glass now and then (one sweep crossing the
+   whole window), dust floats up in the light, and on a partly cloudy day
+   patches of light wander over the panels. At night the glint is the
+   moon's. */
+.pbg-glint {
+  top: -60%;
+  left: 0;
+  width: 40%;
+  height: 220%;
+  opacity: var(--pb-glint-a, 0);
+  background: linear-gradient(90deg, transparent, rgba(var(--pb-glint-rgb), 0.08) 40%, rgba(var(--pb-glint-rgb), 0.17) 50%,
+    rgba(var(--pb-glint-rgb), 0.08) 60%, transparent);
+  animation: pbg-glint 18s ease-in-out infinite;
+}
+@keyframes pbg-glint {
+  0% { transform: translateX(-130%) rotate(20deg); }
+  50%, 100% { transform: translateX(340%) rotate(20deg); }
+}
+.pbg-motes-wrap {
+  inset: 0;
+  opacity: var(--pb-mote-a, 0);
+  -webkit-mask-image: radial-gradient(110% 80% at var(--pb-glint-x, 50%) 0%, #000, transparent 75%);
+  mask-image: radial-gradient(110% 80% at var(--pb-glint-x, 50%) 0%, #000, transparent 75%);
+}
+.pbg-motes {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: calc(100% + 420px);
+  background-size: 420px 420px;
+  animation: pbg-up 80s linear infinite;
+}
+.pbg-motes.pbg-twinkle {
+  animation: pbg-up 50s linear infinite, pbg-twinkle 3.6s ease-in-out infinite alternate;
+}
+@keyframes pbg-up {
+  to { transform: translateY(-420px); }
+}
+@keyframes pbg-twinkle {
+  from { opacity: 0.15; }
+  to { opacity: 1; }
+}
+.pbg-dapple {
+  top: -10%;
+  left: -70%;
+  width: 240%;
+  height: 80%;
+  opacity: calc(var(--pb-glint-a, 0) * 0.9 + 0.15);
+  background:
+    radial-gradient(14% 55% at 18% 30%, rgba(var(--pb-glint-rgb), 0.07), transparent 70%),
+    radial-gradient(10% 45% at 46% 15%, rgba(var(--pb-glint-rgb), 0.05), transparent 70%),
+    radial-gradient(16% 60% at 74% 35%, rgba(var(--pb-glint-rgb), 0.06), transparent 70%);
+  animation: pbg-dapple 70s ease-in-out infinite alternate;
+}
+.pbg-dapple.pbg-dim {
+  opacity: 0.35;
+}
+@keyframes pbg-dapple {
+  to { transform: translateX(28%); }
+}
+
+/* Fog: mist drifts slowly across the lower glass, over a little
+   condensation at the top. */
+.pbg-mist {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 200%;
+  background-size: 50% 100%;
+  background-repeat: repeat-x;
+  opacity: 0.6;
+  animation: pbg-mist 150s linear infinite;
+}
+@keyframes pbg-mist {
+  to { transform: translateX(-50%); }
+}
+.pbg-condense {
+  inset: 0;
+  background: linear-gradient(rgba(190, 196, 210, 0.1), transparent 55%);
+}
+
+/* Lightning flickers inside the panels in step with the top bar. */
+.pbg-flash {
+  inset: 0;
+  opacity: 0;
+  background: linear-gradient(rgba(200, 210, 255, 0.16), rgba(200, 210, 255, 0.03) 50%);
+  animation: pbs-flash 9.7s infinite;
+}
+
+.pb-hidden .pb-glass *,
+.pb-hidden .pb-glass *::before,
+.pb-hidden .pb-glass *::after {
+  animation-play-state: paused !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pb-glass * {
+    animation: none !important;
+  }
+}
+
+/* The specular ring, shared by the floating glass pieces. */
+[data-testid="now-playing-bar"]::before,
+.EmXZMILXH0bP7U461Va6::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--pb-glass-rim);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+
+/* Top bar: one floating glass capsule holding the traffic lights, arrows,
+   Home, search and the right-side buttons. Its glass sits on a layer behind
+   the bar's content, inset by the panel gap on every side so its edges line
+   up with the panels below and the margins match the gaps between panels.
+   The bar is 16px taller than Spotify's so the glass has 8px of padding
+   around the 48px controls; theme.js tells macOS the new title bar height so
+   the traffic lights stay centered on it. */
+.EmXZMILXH0bP7U461Va6 {
+  isolation: isolate;
+  height: calc(48px + 16px + var(--panel-gap, 8px) * 2);
+  padding-inline: calc(var(--panel-gap, 8px) + 8px);
+}
+.EmXZMILXH0bP7U461Va6::before,
+.EmXZMILXH0bP7U461Va6::after {
+  inset: var(--panel-gap, 8px);
+  border-radius: var(--pb-radius-outer);
+  z-index: -1;
+}
+.EmXZMILXH0bP7U461Va6::before {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  background: var(--pb-glass-fill);
+  -webkit-backdrop-filter: var(--pb-glass-blur);
+  backdrop-filter: var(--pb-glass-blur);
+  box-shadow: var(--pb-glass-depth);
+}
+
+/* Sky inside the top bar's capsule (built by theme.js): clouds, sun or moon,
+   and the current weather. It covers the glass fill, so the fill's blur is
+   switched off once the sky is there; the specular ring (::after) still sits
+   on top. Everything in it only moves with transforms and opacity. */
+.EmXZMILXH0bP7U461Va6.pb-has-sky::before {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.pb-sky {
+  --pbs-top: #0a0820;
+  --pbs-bottom: #171236;
+  --pbs-sun-x: 50%;
+  --pbs-sun-y: 50%;
+  --pbs-sun-o: 0;
+  --pbs-sun-rgb: 255, 214, 120;
+  --pbs-glare: 0;
+  --pbs-moon-x: 50%;
+  --pbs-moon-y: 40%;
+  --pbs-moon-o: 0;
+  --pbs-stars: 0;
+  position: absolute;
+  inset: var(--panel-gap, 8px);
+  z-index: -1;
+  overflow: hidden;
+  border-radius: var(--pb-radius-outer);
+  pointer-events: none;
+  contain: layout paint style;
+  background: linear-gradient(var(--pbs-top), var(--pbs-bottom));
+}
+.pb-sky > * {
+  position: absolute;
+  pointer-events: none;
+}
+.pb-sky canvas {
+  display: block;
+}
+
+.pbs-stars {
+  left: 0;
+  top: 0;
+  opacity: var(--pbs-stars);
+}
+.pb-sky.pbs-night .pbs-twinkle {
+  animation: pbs-twinkle 3.2s ease-in-out infinite alternate;
+}
+@keyframes pbs-twinkle {
+  from { opacity: calc(var(--pbs-stars) * 0.1); }
+  to { opacity: var(--pbs-stars); }
+}
+
+/* Sun: a hot core inside a wide, soft bloom. */
+.pbs-sun {
+  left: var(--pbs-sun-x);
+  top: var(--pbs-sun-y);
+  width: 0;
+  height: 0;
+  opacity: var(--pbs-sun-o);
+}
+.pbs-sun::before,
+.pbs-sun::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+.pbs-sun::before {
+  width: 260px;
+  height: 260px;
+  background: radial-gradient(circle, rgba(var(--pbs-sun-rgb), 0.42) 0%, rgba(var(--pbs-sun-rgb), 0.16) 18%,
+    rgba(var(--pbs-sun-rgb), 0.05) 40%, transparent 70%);
+}
+.pbs-sun::after {
+  width: 16px;
+  height: 16px;
+  background: radial-gradient(circle, #fff 0 45%, rgba(255, 250, 235, 0.9) 60%, rgba(var(--pbs-sun-rgb), 0) 100%);
+  box-shadow: 0 0 14px 5px rgba(255, 245, 220, 0.65);
+}
+/* Clouds near the sun glow when it's behind them. */
+.pbs-glare {
+  inset: 0;
+  opacity: var(--pbs-glare);
+  background: radial-gradient(160px 120px at var(--pbs-sun-x) var(--pbs-sun-y), rgba(var(--pbs-sun-rgb), 0.3), transparent 70%);
+}
+
+.pbs-moon {
+  left: var(--pbs-moon-x);
+  top: var(--pbs-moon-y);
+  opacity: var(--pbs-moon-o);
+  transform: translate(-50%, -50%);
+}
+.pbs-moon::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 120px;
+  height: 120px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(200, 210, 255, 0.16), rgba(200, 210, 255, 0.04) 40%, transparent 70%);
+}
+.pbs-moon canvas {
+  position: relative;
+  width: 20px;
+  height: 20px;
+}
+
+/* Cloud decks: pre-rendered canvases that only slide, one tile per loop. */
+.pbs-deck {
+  left: 0;
+}
+.pbs-drift {
+  position: relative;
+  animation: pbs-drift linear infinite;
+}
+@keyframes pbs-drift {
+  to { transform: translateX(calc(var(--pbs-tile) * -1px)); }
+}
+.pbs-flash {
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: 0;
+}
+
+/* Rain and snow: tiled canvases falling one tile per loop. */
+.pbs-precip {
+  inset: -30px -15%;
+  display: none;
+}
+.pb-sky[data-precip="rain"] .pbs-rain,
+.pb-sky[data-precip="snow"] .pbs-snow {
+  display: block;
+}
+.pbs-rain {
+  transform: rotate(var(--pbs-wind, 10deg));
+}
+.pbs-fall {
+  position: absolute;
+  left: 0;
+  top: calc(var(--pbs-tileh) * -1px);
+  animation: pbs-fall linear infinite;
+}
+@keyframes pbs-fall {
+  to { transform: translateY(calc(var(--pbs-tileh) * 1px)); }
+}
+.pbs-sway {
+  position: absolute;
+  inset: 0;
+  animation: pbs-sway ease-in-out infinite alternate;
+}
+@keyframes pbs-sway {
+  from { transform: translateX(-6px); }
+  to { transform: translateX(6px); }
+}
+
+/* Lightning: the clouds light from inside, with a far flash on its own
+   clock so the storm never feels looped. */
+.pbs-storm {
+  display: none;
+}
+.pb-sky[data-weather="storm"] .pbs-storm {
+  display: block;
+}
+.pbs-bolt {
+  top: 0;
+  width: 100px;
+  height: 64px;
+  opacity: 0;
+}
+.pbs-skyflash {
+  inset: 0;
+  opacity: 0;
+  background: radial-gradient(40% 180% at var(--pbs-bolt-x, 30%) 0%, rgba(215, 222, 255, 0.5), transparent 70%);
+}
+.pb-sky[data-weather="storm"] .pbs-flash-near {
+  animation: pbs-flash 9.7s infinite;
+}
+.pb-sky[data-weather="storm"] .pbs-flash-far {
+  animation: pbs-flash-far 13.3s -5s infinite;
+}
+@keyframes pbs-flash {
+  0%, 60% { opacity: 0; }
+  60.4% { opacity: 1; }
+  61% { opacity: 0.2; }
+  61.6% { opacity: 0.9; }
+  63% { opacity: 0.35; }
+  66%, 100% { opacity: 0; }
+}
+@keyframes pbs-flash-far {
+  0%, 70% { opacity: 0; }
+  70.6% { opacity: 0.45; }
+  72% { opacity: 0; }
+  72.8% { opacity: 0.25; }
+  75%, 100% { opacity: 0; }
+}
+
+.pbs-haze {
+  inset: 0;
+  opacity: 0;
+  background: linear-gradient(rgba(170, 178, 192, 0), rgba(170, 178, 192, 0.35));
+}
+.pb-sky[data-weather="fog"] .pbs-haze {
+  opacity: 1;
+}
+
+/* Darkens the sky a little so the bar's icons and text always read. */
+.pbs-scrim {
+  inset: 0;
+  background: linear-gradient(rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.34));
+}
+
+.pb-sky.pbs-paused *,
+.pb-sky.pbs-paused *::before,
+.pb-sky.pbs-paused *::after {
+  animation-play-state: paused !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pb-sky *,
+  .pb-sky *::before,
+  .pb-sky *::after {
+    animation: none !important;
+  }
+}
+
+/* Icons on the sky get a soft shadow so they hold up over bright cloud. */
+.EmXZMILXH0bP7U461Va6.pb-has-sky svg {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+
+/* Playbar: a floating glass capsule with room on both ends. */
+[data-testid="now-playing-bar"] {
+  position: relative;
+  /* A faint reflection of the sky, like ground under it. */
+  background: linear-gradient(0deg, rgba(var(--pb-sky-bottom), 0.26), rgba(var(--pb-sky-top), 0.1)), var(--pb-glass-fill);
+  -webkit-backdrop-filter: var(--pb-glass-blur);
+  backdrop-filter: var(--pb-glass-blur);
+  border-radius: var(--pb-radius-outer);
+  box-shadow: var(--pb-glass-depth);
+  padding-inline: 10px 18px;
+}
+[data-testid="now-playing-bar"]::before {
+  inset: 0;
+}
+
+/* Search bar, Home button and account button: glass pills in the top bar. */
+.xLC8OrWuExkkvVyzV00Y .RYFwfQTMR9mVodv10kWY,
+.Worq2D_XocZxFcvD2Z0U,
+.EmXZMILXH0bP7U461Va6 .qxmESh112XlM9plvFzlP {
+  background: linear-gradient(170deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.025) 55%, rgba(255, 255, 255, 0.05));
+  box-shadow: var(--pb-glass-depth-flat);
+}
+.xLC8OrWuExkkvVyzV00Y:hover .RYFwfQTMR9mVodv10kWY,
+.xLC8OrWuExkkvVyzV00Y .RYFwfQTMR9mVodv10kWY:focus,
+.Worq2D_XocZxFcvD2Z0U:hover,
+.Worq2D_XocZxFcvD2Z0U:focus-within,
+.EmXZMILXH0bP7U461Va6 .qxmESh112XlM9plvFzlP:hover {
+  background: linear-gradient(170deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05) 55%, rgba(255, 255, 255, 0.08));
+}
+/* Over the sky the pills are darker, clear glass, so clouds pass behind
+   them blurred and white text still reads on a bright day. */
+.pb-has-sky .xLC8OrWuExkkvVyzV00Y .RYFwfQTMR9mVodv10kWY,
+.pb-has-sky .Worq2D_XocZxFcvD2Z0U,
+.pb-has-sky .qxmESh112XlM9plvFzlP {
+  background: linear-gradient(170deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 55%), rgba(0, 0, 0, 0.16);
+  -webkit-backdrop-filter: blur(8px) saturate(140%);
+  backdrop-filter: blur(8px) saturate(140%);
+}
+.pb-has-sky .xLC8OrWuExkkvVyzV00Y:hover .RYFwfQTMR9mVodv10kWY,
+.pb-has-sky .xLC8OrWuExkkvVyzV00Y .RYFwfQTMR9mVodv10kWY:focus,
+.pb-has-sky .Worq2D_XocZxFcvD2Z0U:hover,
+.pb-has-sky .Worq2D_XocZxFcvD2Z0U:focus-within,
+.pb-has-sky .qxmESh112XlM9plvFzlP:hover {
+  background: linear-gradient(170deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04) 55%), rgba(0, 0, 0, 0.1);
+}
+
+/* Chips and tinted buttons: small glass pills. */
+.e-10860-legacy-chip__inner,
+.e-10860-button--secondary,
+.e-10860-search-field {
+  box-shadow: var(--pb-glass-depth-flat);
+}
+
+/* Top bar of the main view once you scroll: frosted instead of solid. */
+.main-topBar-background {
+  background-color: rgba(0, 0, 0, 0.42) !important;
+  -webkit-backdrop-filter: var(--pb-glass-blur);
+  backdrop-filter: var(--pb-glass-blur);
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* Menus, dropdowns, popovers and tooltips: liquid glass sheets. */
+.e-10860-overlay,
+.e-10860-legacy-overlay,
+.x1VZRZu4uDB170_UwNqg,
+.svkwA2IlmQCImZKANrdx,
+.IdSBvPRlGUkiBvoC79fs,
+.GtMsGYOcmE6za33joXKW,
+.tippy-box[data-theme~="activation"] {
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02) 50%, rgba(255, 255, 255, 0.04)),
+    rgba(var(--spice-rgb-main-elevated), 0.7);
+  -webkit-backdrop-filter: var(--pb-glass-blur);
+  backdrop-filter: var(--pb-glass-blur);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.22),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.09),
+    0 18px 44px rgba(0, 0, 0, 0.6);
+}
+
+/* Cards on hover: a lit glass tile rather than a flat gray one. */
+.main-card-card:hover,
+.main-card-card:focus-within,
+.main-card-card[data-context-menu-open="true"] {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.08), rgba(var(--pb-accent-rgb), 0.042) 60%, rgba(255, 255, 255, 0.03));
+  box-shadow: var(--pb-glass-depth-flat);
+}
+
+/* "Playing on <device>": an accent device icon in the next button slot after
+   repeat. Hovering it shows "Playing on <device>" beside it; clicking it opens
+   Spotify's device picker. Spotify draws this as a filled accent badge (its
+   children carry their own accent color set), so every fill inside is
+   cleared. Narrow windows keep it as a quiet text row under the controls. */
+.EgAo7_ZXuNWqXBv5I4ag {
+  height: auto;
+  padding: 0 0 6px;
+}
+.EgAo7_ZXuNWqXBv5I4ag,
+.EgAo7_ZXuNWqXBv5I4ag * {
+  --text-base: var(--pb-text, #a782f2) !important;
+  --text-subdued: var(--pb-text, #a782f2) !important;
+  --essential-base: var(--pb-text, #a782f2) !important;
+  --background-base: transparent !important;
+  --background-highlight: transparent !important;
+  --background-press: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--pb-text, #a782f2);
+}
+@media (min-width: 1200px) {
+  .EgAo7_ZXuNWqXBv5I4ag {
+    position: absolute;
+    top: 8px;
+    left: calc(50% + 112px);
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background-color 0.2s ease;
+  }
+  .EgAo7_ZXuNWqXBv5I4ag:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+  }
+  /* The icon sits dead center in the 32px circle. */
+  .EgAo7_ZXuNWqXBv5I4ag > :not(.Di786CSUVvZf8FY_rEXk) {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    margin: 0;
+    transform: translate(-50%, -50%);
+  }
+  /* The device name button covers the whole icon, so clicking the icon
+     opens the device picker; its text floats out to the right on hover. */
+  .EgAo7_ZXuNWqXBv5I4ag .Di786CSUVvZf8FY_rEXk {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    cursor: pointer;
+  }
+  .EgAo7_ZXuNWqXBv5I4ag .Di786CSUVvZf8FY_rEXk > * {
+    position: absolute;
+    top: 50%;
+    left: calc(100% + 6px);
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transform: translate(-4px, -50%);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+  .EgAo7_ZXuNWqXBv5I4ag:hover .Di786CSUVvZf8FY_rEXk > *,
+  .EgAo7_ZXuNWqXBv5I4ag:focus-within .Di786CSUVvZf8FY_rEXk > * {
+    opacity: 1;
+    transform: translate(0, -50%);
+  }
+}
+
+/* Playbar pulse: a pool of the accent in the middle of the playbar breathes
+   slowly while music plays and holds still when paused. theme.js sets .pb-playing on <html> from
+   Spotify's playback state. */
+@keyframes pb-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.9; }
+}
+[data-testid="now-playing-bar"] {
+  isolation: isolate;
+}
+[data-testid="now-playing-bar"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    radial-gradient(28% 220% at 50% 0%, rgba(var(--pb-accent-rgb), 0.22), transparent 70%),
+    radial-gradient(55% 260% at 50% 0%, rgba(var(--pb-tint-rgb, 130, 85, 240), 0.09), transparent 70%);
+  opacity: 0.35;
+  animation: pb-pulse 4s ease-in-out infinite;
+  animation-play-state: paused;
+}
+.pb-playing [data-testid="now-playing-bar"]::after {
+  animation-play-state: running;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-testid="now-playing-bar"]::after {
+    animation: none;
+  }
+}
+
+/* ------------------------------------------------------------------------
+   Corner radius scale (see --pb-radius-*). Spotify's own tokens cover its
+   newer components; the rest hardcode 4px or 8px and are listed here.
+   ------------------------------------------------------------------------ */
+.encore-layout-themes,
+.encore-small-devices-theme,
+.encore-medium-devices-theme,
+.encore-large-devices-theme {
+  --encore-corner-radius-smaller: 4px;
+  --encore-corner-radius-base: var(--pb-radius-art);
+  --encore-corner-radius-larger: var(--pb-radius-art);
+  --encore-corner-radius-larger-2: var(--pb-radius-inner);
+  --encore-corner-radius-larger-3: var(--pb-radius-outer);
+}
+
+/* Outer: the three panels and the right sidebar's states. */
+#Desktop_LeftSidebar_Id,
+.BPRPH_jrStQIw2m2qfDl,
+.yAneh8mS1FolwrgwEr9D,
+.L7axY6UmnjtUGsVK5bn0,
+.xT1RZwPYcz7B6Ce7d5_5,
+.Root__right-sidebar-peek,
+.Root__right-sidebar-overlayWrapper,
+.Root__right-sidebar-peekContent {
+  border-radius: var(--pb-radius-outer);
+}
+.main-topBar-background {
+  border-top-left-radius: var(--pb-radius-outer);
+  border-top-right-radius: var(--pb-radius-outer);
+}
+
+/* Inner: Home shortcut tiles, cards, sidebar sections, menus, tooltips. */
+.view-homeShortcutsGrid-shortcut {
+  border-radius: var(--pb-radius-inner);
+  overflow: hidden;
+}
+.main-card-card,
+.GtMsGYOcmE6za33joXKW,
+.tippy-box,
+._UBSxDj0W3npMZmAHBHg,
+.HrbnNN7vkqezs06y4T6p,
+.XmXGiDuC_8V23iA07ZGd,
+.hMmF6IL0WDN29KL01IzB {
+  --section-border-radius: var(--pb-radius-inner);
+  border-radius: var(--pb-radius-inner);
+}
+
+/* Artwork and track rows. */
+.main-entityHeader-image,
+.main-entityHeader-imageContainerNew,
+.main-cardImage-imageWrapper,
+.main-cardImage-image,
+.main-trackList-trackListRow {
+  border-radius: var(--pb-radius-art);
+}
+
+/* ------------------------------------------------------------------------
+   Hover states are neutral lifts (--pb-lit) with no color of their own, so
+   the sky stays the one source of color: a hovered row near the top of a
+   panel picks up its wash, one further down just lifts.
+   ------------------------------------------------------------------------ */
+.main-trackList-trackListRow:hover,
+.main-trackList-trackListRow:focus-within,
+.e-10860-list-row--interactive:hover,
+.e-10860-list-row--interactive[data-hovered],
+.view-homeShortcutsGrid-shortcut:hover,
+.view-homeShortcutsGrid-shortcut:focus-within,
+.view-homeShortcutsGrid-shortcut[data-context-menu-open="true"],
+.main-card-card:hover,
+.main-card-card:focus-within,
+.main-card-card[data-context-menu-open="true"] {
+  background: var(--pb-lit);
+}

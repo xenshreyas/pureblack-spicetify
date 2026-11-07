@@ -1,0 +1,822 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sky App Looks</title>
+<style>
+  :root { --bg: #000; --text: #fff; --sub: #a7a7a7; --line: rgba(255, 255, 255, 0.1); }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    padding: 20px 16px 48px;
+  }
+  body.shot { padding: 0; }
+  body.shot .chrome { display: none; }
+  .stage { max-width: 1440px; margin: 0 auto; }
+
+  /* --------------------------------------------------------------- app */
+  .viewport { position: relative; width: 100%; aspect-ratio: 1440 / 900; overflow: hidden; border-radius: 12px; }
+  body.shot .viewport { border-radius: 0; }
+  .app {
+    --accent: 255, 255, 255; --sky-top: 10, 8, 32; --sky-bottom: 23, 18, 54; --sky-lit: 255, 255, 255;
+    --light: 255, 220, 140; --light-a: 0.5; --diffuse: 0; --src-x: 50%; --beam-w: 40deg; --beam-tilt: 0deg;
+    --sun-glint: 0;
+    position: absolute; left: 0; top: 0; width: 1440px; height: 900px; transform-origin: 0 0;
+    display: grid; grid-template-columns: 320px 1fr 290px; grid-template-rows: 80px 1fr 80px;
+    column-gap: 8px; padding: 0 8px 8px; background: #000; overflow: hidden;
+  }
+  .bg { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+  .bg > * { position: absolute; inset: 0; opacity: 0; }
+  .bg canvas { width: 100%; height: 62%; inset: 0 0 auto 0; filter: blur(16px); transform: scale(1.08); }
+
+  .top { grid-column: 1 / -1; position: relative; z-index: 2; }
+  .panel, .playbar { position: relative; z-index: 1; border-radius: 14px; overflow: hidden; background: #000; }
+  .playbar { grid-column: 1 / -1; margin-top: 8px; display: grid; grid-template-columns: 1fr 1.2fr 1fr; align-items: center; padding: 0 18px 0 10px; }
+  .panel > .fx, .playbar > .fx { position: absolute; inset: 0; pointer-events: none; opacity: 0; border-radius: inherit; }
+  .panel > .inner { position: relative; z-index: 1; height: 100%; padding: 16px; overflow: hidden; }
+  .playbar > .inner { display: contents; }
+  .playbar > *:not(.fx) { position: relative; z-index: 1; }
+
+  /* ---------------------------------------------------- top bar (sky) */
+  .bar {
+    --sun-x: 50%; --sun-y: 50%; --sun-o: 0; --sun-rgb: 255, 214, 120; --glare: 0;
+    --moon-x: 50%; --moon-y: 40%; --moon-o: 0; --stars: 0;
+    position: absolute; inset: 8px 0; border-radius: 14px; overflow: hidden; isolation: isolate;
+    background: linear-gradient(rgb(var(--sky-top)), rgb(var(--sky-bottom)));
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.12), inset 0 -1px 1px rgba(0, 0, 0, 0.35);
+  }
+  .bar > * { position: absolute; pointer-events: none; }
+  .bar canvas { display: block; }
+  .stars, .stars-tw { left: 0; top: 0; opacity: var(--stars); }
+  .stars-tw { animation: twinkle 3.2s ease-in-out infinite alternate; }
+  @keyframes twinkle { from { opacity: calc(var(--stars) * 0.1); } to { opacity: var(--stars); } }
+  .sun { left: var(--sun-x); top: var(--sun-y); width: 0; height: 0; opacity: var(--sun-o); }
+  .sun::before, .sun::after { content: ""; position: absolute; border-radius: 50%; transform: translate(-50%, -50%); }
+  .sun::before { width: 260px; height: 260px; background: radial-gradient(circle, rgba(var(--sun-rgb), 0.42) 0%, rgba(var(--sun-rgb), 0.16) 18%, rgba(var(--sun-rgb), 0.05) 40%, transparent 70%); }
+  .sun::after { width: 16px; height: 16px; background: radial-gradient(circle, #fff 0 45%, rgba(255, 250, 235, 0.9) 60%, rgba(var(--sun-rgb), 0) 100%); box-shadow: 0 0 14px 5px rgba(255, 245, 220, 0.65); }
+  .glare { inset: 0; opacity: var(--glare); background: radial-gradient(160px 120px at var(--sun-x) var(--sun-y), rgba(var(--sun-rgb), 0.3), transparent 70%); }
+  .moon { left: var(--moon-x); top: var(--moon-y); opacity: var(--moon-o); transform: translate(-50%, -50%); }
+  .moon::before { content: ""; position: absolute; left: 50%; top: 50%; width: 120px; height: 120px; transform: translate(-50%, -50%); border-radius: 50%; background: radial-gradient(circle, rgba(200, 210, 255, 0.16), rgba(200, 210, 255, 0.04) 40%, transparent 70%); }
+  .moon canvas { position: relative; width: 20px; height: 20px; }
+  .deck { left: 0; }
+  .drift { position: relative; animation: drift linear infinite; }
+  @keyframes drift { to { transform: translateX(calc(var(--tile) * -1px)); } }
+  .flashc { position: absolute; left: 0; top: 0; opacity: 0; }
+  .precip { inset: -30px -15%; display: none; }
+  .bar[data-precip="rain"] .rain, .bar[data-precip="snow"] .snow { display: block; }
+  .rain { transform: rotate(var(--wind, 10deg)); }
+  .fall { position: absolute; left: 0; top: calc(var(--tileh) * -1px); animation: fall linear infinite; }
+  @keyframes fall { to { transform: translateY(calc(var(--tileh) * 1px)); } }
+  .sway { position: absolute; inset: 0; animation: sway ease-in-out infinite alternate; }
+  @keyframes sway { from { transform: translateX(-6px); } to { transform: translateX(6px); } }
+  .storm-only { display: none; }
+  .app[data-weather="storm"] .storm-only { display: block; }
+  .bolt { top: 0; opacity: 0; }
+  .skyflash { inset: 0; opacity: 0; background: radial-gradient(40% 180% at var(--bolt-x, 30%) 0%, rgba(215, 222, 255, 0.5), transparent 70%); }
+  .app[data-weather="storm"] .flash-anim { animation: flash 9.7s infinite; }
+  .app[data-weather="storm"] .flash-far { animation: flashfar 13.3s -5s infinite; }
+  @keyframes flash { 0%, 60% { opacity: 0; } 60.4% { opacity: 1; } 61% { opacity: 0.2; } 61.6% { opacity: 0.9; } 63% { opacity: 0.35; } 66%, 100% { opacity: 0; } }
+  @keyframes flashfar { 0%, 70% { opacity: 0; } 70.6% { opacity: 0.45; } 72% { opacity: 0; } 72.8% { opacity: 0.25; } 75%, 100% { opacity: 0; } }
+  .haze { inset: 0; opacity: 0; background: linear-gradient(rgba(170, 178, 192, 0), rgba(170, 178, 192, 0.35)); }
+  .app[data-weather="fog"] .haze { opacity: 1; }
+  .scrim { inset: 0; background: linear-gradient(rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.34)); }
+  .app.paused *, .app.paused *::before, .app.paused *::after { animation-play-state: paused !important; }
+  @media (prefers-reduced-motion: reduce) { .app *, .app *::before, .app *::after { animation: none !important; } }
+
+  .bar-content { position: absolute; inset: 0; display: flex; align-items: center; gap: 8px; padding: 0 16px; pointer-events: auto; }
+  .lights { display: flex; gap: 8px; margin-right: 14px; }
+  .lights span { width: 12px; height: 12px; border-radius: 50%; }
+  .icon { width: 36px; height: 36px; display: grid; place-items: center; color: rgba(255, 255, 255, 0.92); }
+  .bar .icon { filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35)); }
+  .icon svg { width: 22px; height: 22px; }
+  .icon.sm svg { width: 18px; height: 18px; }
+  .center { position: absolute; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; }
+  .pill-glass { background: linear-gradient(170deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 55%), rgba(0, 0, 0, 0.16); -webkit-backdrop-filter: blur(8px) saturate(140%); backdrop-filter: blur(8px) saturate(140%); box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.2), inset 0 -1px 1px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.08); border-radius: 999px; }
+  .home { width: 48px; height: 48px; display: grid; place-items: center; }
+  .search { width: 470px; height: 48px; display: flex; align-items: center; gap: 10px; padding: 0 14px; color: rgba(255, 255, 255, 0.8); font-size: 16px; white-space: nowrap; }
+  .right { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+  .avatar { width: 40px; height: 40px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #c9d6e8, #4c5d78 60%, #1b2230); margin-left: 8px; box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.5); }
+
+  /* ------------------------------------------------------- app content */
+  h2 { font-size: 18px; margin: 0; font-weight: 700; letter-spacing: -0.01em; }
+  h3 { font-size: 24px; margin: 0; font-weight: 700; letter-spacing: -0.02em; }
+  .muted { color: var(--sub); }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .chip { padding: 6px 13px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); font-size: 14px; color: #fff; }
+  .chip.on { background: rgb(var(--accent)); color: #000; font-weight: 600; }
+  .art { border-radius: 6px; flex: none; background: var(--a); position: relative; overflow: hidden; }
+  .art::after { content: ""; position: absolute; inset: 0; background: radial-gradient(120% 90% at 20% 15%, rgba(255, 255, 255, 0.28), transparent 50%), radial-gradient(80% 80% at 85% 90%, rgba(0, 0, 0, 0.45), transparent 60%); }
+  .lib-item { display: flex; gap: 12px; align-items: center; padding: 6px 8px; border-radius: 8px; }
+  .lib-item .art { width: 48px; height: 48px; }
+  .lib-item b { display: block; font-weight: 500; font-size: 15px; }
+  .lib-item span { font-size: 13px; color: var(--sub); }
+  .lib-item.active { background: rgba(255, 255, 255, 0.07); }
+  .lib-item.active b { color: rgb(var(--accent)); }
+  .quick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 16px 0 28px; }
+  .quick > div { display: flex; align-items: center; gap: 10px; height: 48px; border-radius: 6px; background: rgba(255, 255, 255, 0.07); overflow: hidden; font-weight: 600; font-size: 14px; -webkit-backdrop-filter: none; }
+  .quick .art { width: 48px; height: 48px; border-radius: 0; }
+  .cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-top: 14px; }
+  .card .art { width: 100%; aspect-ratio: 1; border-radius: 8px; }
+  .card b { display: block; font-weight: 500; margin-top: 8px; font-size: 15px; }
+  .card span { font-size: 13px; color: var(--sub); }
+  .section-head { display: flex; align-items: baseline; justify-content: space-between; margin-top: 4px; }
+  .section-head small { color: var(--sub); font-weight: 600; font-size: 13px; }
+  .hero { display: flex; gap: 22px; align-items: flex-end; margin: 14px 0 30px; }
+  .hero .art { width: 180px; height: 180px; border-radius: 8px; }
+  .playbtn { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: rgb(var(--accent)); color: #000; box-shadow: 0 6px 18px rgba(var(--accent), 0.25); }
+  .np .art { width: 100%; aspect-ratio: 1; border-radius: 10px; margin: 14px 0 16px; }
+  .np b { font-size: 22px; letter-spacing: -0.01em; display: block; }
+  .np-card { margin-top: 18px; padding: 14px; border-radius: 10px; background: rgba(255, 255, 255, 0.06); }
+  .pb-left { display: flex; align-items: center; gap: 12px; }
+  .pb-left .art { width: 56px; height: 56px; }
+  .pb-mid { display: grid; gap: 6px; justify-items: center; }
+  .pb-controls { display: flex; align-items: center; gap: 22px; color: rgba(255, 255, 255, 0.8); }
+  .pb-play { width: 34px; height: 34px; border-radius: 50%; background: #fff; display: grid; place-items: center; color: #000; }
+  .progress { display: flex; align-items: center; gap: 10px; width: 100%; font-size: 12px; color: var(--sub); }
+  .track { flex: 1; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.2); overflow: hidden; }
+  .track i { display: block; height: 100%; width: 24%; background: rgb(var(--accent)); }
+  .pb-right { display: flex; justify-content: flex-end; align-items: center; gap: 14px; color: rgba(255, 255, 255, 0.75); }
+  .vol { width: 90px; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.85); }
+
+  /* ======================================================== THE LOOKS */
+
+  /* A. Weather light: the spotlight becomes the light outside. A crisp
+     sunbeam on a clear day, one broad soft glow under cloud, a cool
+     moonbeam at night. Panels stay black; the light falls across them. */
+  .app[data-look~="a"] .bg .beam {
+    opacity: 1;
+    background:
+      radial-gradient(140% 75% at var(--src-x) -12%, rgba(var(--light), calc(var(--light-a) * 1.1 * var(--diffuse))), rgba(var(--light), calc(var(--light-a) * 0.3 * var(--diffuse))) 45%, transparent 80%),
+      conic-gradient(from calc(180deg - var(--beam-w) / 2 + var(--beam-tilt)) at var(--src-x) -35%,
+        transparent 0deg,
+        rgba(var(--light), calc(var(--light-a) * 0.34 * (1 - var(--diffuse) * 0.8))) calc(var(--beam-w) * 0.5),
+        transparent var(--beam-w), transparent 360deg);
+    -webkit-mask-image: linear-gradient(#000 10%, rgba(0, 0, 0, 0.5) 60%, transparent 100%);
+    mask-image: linear-gradient(#000 10%, rgba(0, 0, 0, 0.5) 60%, transparent 100%);
+  }
+  .app[data-look~="a"] .panel, .app[data-look~="a"] .playbar { background: rgba(0, 0, 0, 0.72); box-shadow: inset 0 1px 0 rgba(var(--light), calc(0.12 + var(--light-a) * 0.2)), inset 0 0 0 1px rgba(255, 255, 255, 0.05); }
+
+  /* B. Glass over the sky: the sky carries on behind the whole window,
+     dimmed and softly blurred; every panel is smoked glass floating in it,
+     like the cards in the Weather app. */
+  .app[data-look~="b"] .bg .skyfill { opacity: 1; background: linear-gradient(rgb(var(--sky-bottom)), rgba(var(--sky-bottom), 0.7) 35%, rgba(var(--sky-top), 0.75) 100%); }
+  .app[data-look~="b"] .bg canvas { opacity: 0.7; }
+  .app[data-look~="b"] .panel, .app[data-look~="b"] .playbar {
+    background: rgba(4, 5, 10, 0.62);
+    -webkit-backdrop-filter: blur(34px) saturate(140%); backdrop-filter: blur(34px) saturate(140%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), inset 0 0 0 1px rgba(255, 255, 255, 0.07), 0 18px 40px rgba(0, 0, 0, 0.35);
+  }
+
+  /* C. Weather on the glass: panels stay pure black, but the weather
+     touches them. Their top edges reflect the sky, rain beads on the glass,
+     snow frosts the corners, sun glints across, lightning flickers in them. */
+  .app[data-look~="c"] .panel > .fx.reflect, .app[data-look~="c"] .playbar > .fx.reflect {
+    opacity: 1;
+    background:
+      linear-gradient(115deg, transparent 38%, rgba(var(--sun-rgb-app), calc(var(--sun-glint) * 0.07)) 46%, transparent 54%),
+      linear-gradient(rgba(var(--sky-bottom), 0.2), rgba(var(--sky-top), 0.06) 60px, transparent 130px);
+    box-shadow: inset 0 1px 0 rgba(var(--sky-lit), 0.5), inset 0 0 0 1px rgba(var(--sky-lit), 0.07);
+  }
+  .app[data-look~="c"][data-wet] .panel > .fx.drops, .app[data-look~="c"][data-wet] .playbar > .fx.drops {
+    opacity: var(--wet);
+    background-image: var(--drops-img); background-size: 420px 420px;
+    -webkit-mask-image: linear-gradient(#000, rgba(0, 0, 0, 0.55) 45%, rgba(0, 0, 0, 0.25));
+    mask-image: linear-gradient(#000, rgba(0, 0, 0, 0.55) 45%, rgba(0, 0, 0, 0.25));
+  }
+  .app[data-look~="c"][data-weather="snow"] .panel > .fx.drops, .app[data-look~="c"][data-weather="snow"] .playbar > .fx.drops {
+    opacity: 1; background-image: var(--frost-img); background-size: 420px 420px;
+    -webkit-mask-image: radial-gradient(260px 200px at 0 0, #000, transparent), radial-gradient(260px 200px at 100% 0, #000, transparent), radial-gradient(200px 140px at 0 100%, rgba(0,0,0,.6), transparent), radial-gradient(200px 140px at 100% 100%, rgba(0,0,0,.6), transparent);
+    mask-image: radial-gradient(260px 200px at 0 0, #000, transparent), radial-gradient(260px 200px at 100% 0, #000, transparent), radial-gradient(200px 140px at 0 100%, rgba(0,0,0,.6), transparent), radial-gradient(200px 140px at 100% 100%, rgba(0,0,0,.6), transparent);
+  }
+  .app[data-look~="c"][data-weather="fog"] .panel > .fx.drops { opacity: 1; background: linear-gradient(rgba(190, 196, 210, 0.1), transparent 55%); }
+  .app[data-look~="c"][data-weather="storm"] .panel > .fx.flash, .app[data-look~="c"][data-weather="storm"] .playbar > .fx.flash {
+    background: linear-gradient(rgba(200, 210, 255, 0.16), rgba(200, 210, 255, 0.03) 50%); animation: flash 9.7s infinite;
+  }
+
+  /* D. Horizon: the sky's color washes down into each panel's header, the
+     way Spotify tints a playlist's header from its cover. The playbar holds
+     a faint reflection, like ground under the sky. */
+  .app[data-look~="d"] .panel > .fx.wash { opacity: 1; background: linear-gradient(rgba(var(--sky-bottom), 0.55), rgba(var(--sky-top), 0.3) 150px, rgba(var(--sky-top), 0.08) 300px, transparent 420px); }
+  .app[data-look~="d"] .panel.side > .fx.wash { opacity: 0.6; }
+  .app[data-look~="d"] .playbar > .fx.wash { opacity: 1; background: linear-gradient(0deg, rgba(var(--sky-bottom), 0.26), rgba(var(--sky-top), 0.1)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1); }
+  .app[data-look~="d"] .panel > .fx.wash { transition: background 1s; }
+
+  /* --------------------------------------------------------- controls */
+  .panel-ui { margin-top: 18px; padding: 16px; border-radius: 14px; background: #0b0b0d; border: 1px solid var(--line); display: grid; gap: 14px; }
+  .ctl { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .label { color: var(--sub); width: 64px; flex: none; }
+  input[type=range] { flex: 1; min-width: 200px; accent-color: #8a8fe0; }
+  .time { font-variant-numeric: tabular-nums; width: 74px; text-align: right; }
+  .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+  button { font: inherit; color: var(--text); background: #18181c; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+  button:hover { background: #222228; }
+  button[aria-pressed="true"] { background: #fff; color: #000; border-color: #fff; }
+  .look-desc { color: var(--sub); font-size: 13px; max-width: 900px; }
+  .look-desc b { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="viewport" id="viewport">
+    <div class="app" id="app" data-look="a" data-weather="partly">
+      <div class="bg"><div class="beam"></div><div class="skyfill"></div><canvas id="bgClouds"></canvas></div>
+
+      <div class="top">
+        <div class="bar" id="bar">
+          <canvas class="stars" id="stars"></canvas>
+          <canvas class="stars-tw" id="starsTw"></canvas>
+          <div class="moon"><canvas id="moon" width="40" height="40"></canvas></div>
+          <div class="sun"></div>
+          <div class="deck" id="deckFar"><div class="drift"><canvas></canvas><canvas class="flashc flash-far"></canvas></div></div>
+          <div class="storm-only skyflash flash-far" style="--bolt-x: 70%"></div>
+          <div class="deck" id="deckNear"><div class="drift"><canvas></canvas><canvas class="flashc flash-anim"></canvas></div></div>
+          <div class="storm-only skyflash flash-anim" id="skyflash"></div>
+          <canvas class="storm-only bolt flash-anim" id="bolt" width="200" height="128"></canvas>
+          <div class="glare"></div>
+          <div class="haze"></div>
+          <div class="precip rain" id="rain"></div>
+          <div class="precip snow" id="snow"></div>
+          <div class="scrim"></div>
+          <div class="bar-content">
+            <div class="lights"><span style="background:#ff5f57"></span><span style="background:#febc2e"></span><span style="background:#28c840"></span></div>
+            <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="15" cy="8" r="5"/><path d="m11.5 11.5-7 8 1 1 8-7"/></svg></div>
+            <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h2l2.4 11h11L21 8H6.2"/><circle cx="9" cy="19.5" r="1.3"/><circle cx="17" cy="19.5" r="1.3"/></svg></div>
+            <div class="center">
+              <div class="pill-glass home"><svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d="M4 10.5 12 4l8 6.5V20h-5v-6h-6v6H4z"/></svg></div>
+              <div class="pill-glass search"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>What do you want to play?</div>
+            </div>
+            <div class="right">
+              <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg></div>
+              <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="9" cy="9" r="3"/><circle cx="16.5" cy="10" r="2.4"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0M14 15.5a4.5 4.5 0 0 1 7 3.5"/></svg></div>
+              <div class="avatar"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <section class="panel side" id="library">
+        <div class="fx wash"></div><div class="fx reflect"></div><div class="fx drops"></div><div class="fx flash"></div>
+        <div class="inner">
+          <div class="row" style="justify-content:space-between;padding:4px 8px 0"><h2>Your Library</h2><span class="muted" style="font-size:22px">+</span></div>
+          <div class="row" style="margin:16px 8px 14px"><span class="chip">Playlists</span><span class="chip">Podcasts</span><span class="chip">Albums</span></div>
+          <div id="libList"></div>
+        </div>
+      </section>
+
+      <section class="panel" id="main">
+        <div class="fx wash"></div><div class="fx reflect"></div><div class="fx drops"></div><div class="fx flash"></div>
+        <div class="inner" style="padding:18px 26px">
+          <div class="row"><span class="chip on">All</span><span class="chip">Music</span><span class="chip">Podcasts</span></div>
+          <div class="quick" id="quick"></div>
+          <div class="hero">
+            <div class="art" style="--a: linear-gradient(160deg,#9ec3dc,#3a5d78 55%,#18222c)"></div>
+            <div>
+              <div class="muted" style="font-size:13px">Single · COTIS</div>
+              <h3 style="font-size:28px;margin:4px 0 14px">ONCE AND FOR ALL</h3>
+              <div class="row" style="gap:14px"><div class="playbtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg></div><span class="muted" style="font-size:24px">⊕</span></div>
+            </div>
+          </div>
+          <div class="section-head"><h3>Made For you</h3><small>Show all</small></div>
+          <div class="cards" id="cards"></div>
+        </div>
+      </section>
+
+      <section class="panel side np" id="right">
+        <div class="fx wash"></div><div class="fx reflect"></div><div class="fx drops"></div><div class="fx flash"></div>
+        <div class="inner">
+          <div class="row" style="justify-content:space-between"><h2 style="font-size:16px">Darci Radio</h2><span class="muted">✕</span></div>
+          <div class="art" style="--a: linear-gradient(150deg,#b43a7c,#4b1640 55%,#140611)"></div>
+          <b>Swerve</b>
+          <span class="muted">Darci, KayCyy</span>
+          <div class="np-card"><b style="font-size:15px">About the artist</b><span class="muted" style="font-size:13px">1,204,551 monthly listeners</span></div>
+          <div class="np-card"><b style="font-size:15px">Next in queue</b><span class="muted" style="font-size:13px">Pop Shots · Darci</span></div>
+        </div>
+      </section>
+
+      <footer class="playbar" id="playbar">
+        <div class="fx wash"></div><div class="fx reflect"></div><div class="fx drops"></div><div class="fx flash"></div>
+        <div class="pb-left"><div class="art" style="--a: linear-gradient(150deg,#b43a7c,#4b1640 55%,#140611)"></div><div><b style="font-weight:500">Swerve</b><div class="muted" style="font-size:13px">Darci, KayCyy</div></div></div>
+        <div class="pb-mid">
+          <div class="pb-controls">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h4l10 10h4M3 17h4l3-3M14 10l3-3h4"/></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg>
+            <div class="pb-play"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg></div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12V9a3 3 0 0 1 3-3h12M20 12v3a3 3 0 0 1-3 3H5"/></svg>
+          </div>
+          <div class="progress"><span>0:35</span><div class="track"><i></i></div><span>2:35</span></div>
+        </div>
+        <div class="pb-right"><span>≡</span><span>⌁</span><span>◁)</span><div class="vol"></div></div>
+      </footer>
+    </div>
+  </div>
+
+  <div class="chrome">
+    <div class="panel-ui">
+      <div class="ctl">
+        <span class="label">Look</span>
+        <div class="seg" id="looks">
+          <button data-l="a">A · Weather light</button>
+          <button data-l="b">B · Glass over the sky</button>
+          <button data-l="c">C · Weather on the glass</button>
+          <button data-l="d">D · Horizon</button>
+          <button data-l="c d">C + D</button>
+        </div>
+      </div>
+      <div class="look-desc" id="lookDesc"></div>
+      <div class="ctl">
+        <span class="label">Time</span>
+        <input id="time" type="range" min="0" max="23.99" step="0.05" aria-label="Time of day">
+        <span class="time" id="timeOut"></span>
+        <button id="now">Now</button>
+        <button id="play" aria-pressed="false">Play a day</button>
+      </div>
+      <div class="ctl">
+        <span class="label">Weather</span>
+        <div class="seg" id="weather">
+          <button data-w="clear">Clear</button>
+          <button data-w="partly">Partly cloudy</button>
+          <button data-w="cloudy">Overcast</button>
+          <button data-w="drizzle">Drizzle</button>
+          <button data-w="rain">Rain</button>
+          <button data-w="storm">Thunderstorm</button>
+          <button data-w="snow">Snow</button>
+          <button data-w="fog">Fog</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const LAT = 49.28, LON = -123.12;
+  const app = document.getElementById("app");
+  const bar = document.getElementById("bar");
+  const viewport = document.getElementById("viewport");
+  const slider = document.getElementById("time");
+  const timeOut = document.getElementById("timeOut");
+  const weatherButtons = [...document.querySelectorAll("#weather button")];
+  const lookButtons = [...document.querySelectorAll("#looks button")];
+  const q = new URLSearchParams(location.search);
+  let weather = "partly";
+  let look = "a";
+
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+  const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const trip = (c) => c.map(Math.round).join(",");
+  const smooth = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0)); return t * t * (3 - 2 * t); };
+  function rng(seed) { return () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296; }
+
+  // ---------------------------------------------------------- mock content
+  const art = (h, k = 0) => `linear-gradient(${140 + k * 20}deg, hsl(${h} 60% 58%), hsl(${h + 35} 55% 30%) 55%, hsl(${h + 60} 50% 10%))`;
+  const lib = [["Liked Songs", "Playlist · you", 255], ["On Repeat", "Playlist · Made for you", 320], ["grace", "Playlist · you", 210], ["This Is GRAHAM", "Playlist · Spotify", 20], ["ICEMAN", "Album · Drake", 200], ["Somewhere", "Album · Charlotte Lawrence", 225], ["Friends Blend", "Playlist · Made for you", 280], ["K", "Playlist · you", 35], ["This Is Joji", "Playlist · Spotify", 45], ["Your All-Time Top Songs", "Playlist · Made for you", 95]];
+  document.getElementById("libList").innerHTML = lib.map(([t, s, h], i) =>
+    `<div class="lib-item${i === 0 ? " active" : ""}"><div class="art" style="--a:${art(h, i % 3)}"></div><div><b>${t}</b><span>${s}</span></div></div>`).join("");
+  document.getElementById("quick").innerHTML = [["This Is Darci", 205], ["On Repeat", 320], ["Liked Songs", 255], ["Pop Shots", 40], ["Darci", 215], ["Drake Mix", 30], ["This Is GRAHAM", 20], ["Desi songs", 350]]
+    .map(([t, h], i) => `<div><div class="art" style="--a:${art(h, i % 3)}"></div>${t}</div>`).join("");
+  document.getElementById("cards").innerHTML = [["Release Radar", "Catch the latest from artists you follow", 15], ["Daily Mix 1", "Drake, DONDA, Kanye West", 190], ["Daily Mix 2", "Clairo, d4vd, Conan Gray", 330], ["Discover Weekly", "Your weekly mixtape", 150], ["Daily Mix 3", "Joji, keshi, NIKI", 260]]
+    .map(([t, s, h], i) => `<div class="card"><div class="art" style="--a:${art(h, i % 3)}"></div><b>${t}</b><span>${s}</span></div>`).join("");
+
+  // ---------------------------------------------------------------- noise
+  function hash(x, y, s) {
+    let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(s, 1442695041);
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  }
+  function vnoise(x, y, period, s) {
+    const xi = Math.floor(x), yi = Math.floor(y);
+    let fx = x - xi, fy = y - yi;
+    fx = fx * fx * fx * (fx * (fx * 6 - 15) + 10);
+    fy = fy * fy * fy * (fy * (fy * 6 - 15) + 10);
+    const x0 = ((xi % period) + period) % period, x1 = (x0 + 1) % period;
+    const a = hash(x0, yi, s), b = hash(x1, yi, s), c = hash(x0, yi + 1, s), d = hash(x1, yi + 1, s);
+    return lerp(lerp(a, b, fx), lerp(c, d, fx), fy);
+  }
+  function fbm(x, y, period, octaves, s) {
+    let sum = 0, amp = 0.5, norm = 0, f = 1;
+    for (let i = 0; i < octaves; i++) { sum += amp * vnoise(x * f, y * f, period * f, s + i * 17); norm += amp; amp *= 0.5; f *= 2; }
+    return sum / norm;
+  }
+
+  // ---------------------------------------------------------------- clouds
+  const SCALE = 0.5, TILE = 1024;
+  function makeDeck({ cells, cover, soft, height, seed, stretch = 2.2, warp = 0.9 }) {
+    const w = TILE * SCALE, h = Math.round(height * SCALE);
+    const dens = new Float32Array(w * h), light = new Float32Array(w * h);
+    const k = cells / w;
+    const sample = (px, py) => {
+      const x = px * k, y = py * k * stretch;
+      const wx = fbm(x + 3.1, y + 7.7, cells, 3, seed + 400) - 0.5;
+      const wy = fbm(x + 9.4, y + 1.6, cells, 3, seed + 800) - 0.5;
+      return fbm(x + wx * warp, y + wy * warp, cells, 6, seed);
+    };
+    for (let py = 0; py < h; py++) {
+      const band = smooth(0, 0.3, py / h) * smooth(1, 0.65, py / h);
+      for (let px = 0; px < w; px++) {
+        const n = sample(px, py);
+        const d = smooth(cover, cover + soft, n * (0.75 + 0.25 * band));
+        const i = py * w + px;
+        dens[i] = d;
+        if (d > 0.002) light[i] = clamp(0.55 + (n - sample(px, py - 5)) * 7 + (1 - py / h) * 0.25 - d * 0.25);
+      }
+    }
+    return { w, h, dens, light };
+  }
+  function sizeDeck(el, deck, top) {
+    const tiles = Math.ceil(bar.clientWidth / TILE) + 1;
+    el.style.top = `${top}px`;
+    const drift = el.firstElementChild;
+    drift.style.setProperty("--tile", TILE);
+    for (const c of drift.children) { c.width = deck.w * tiles; c.height = deck.h; c.style.width = `${TILE * tiles}px`; c.style.height = `${deck.h / SCALE}px`; }
+  }
+  function paintDeck(el, deck, lit, shade, alpha) {
+    const [main, flash] = el.firstElementChild.children;
+    const W = main.width, { w, h, dens, light } = deck;
+    const ctx = main.getContext("2d");
+    const img = ctx.createImageData(W, h), px = img.data;
+    for (let y = 0; y < h; y++) for (let x = 0; x < W; x++) {
+      const i = y * w + (x % w), o = (y * W + x) * 4, d = dens[i];
+      if (d < 0.002) continue;
+      const l = light[i];
+      px[o] = shade[0] + (lit[0] - shade[0]) * l; px[o + 1] = shade[1] + (lit[1] - shade[1]) * l; px[o + 2] = shade[2] + (lit[2] - shade[2]) * l;
+      px[o + 3] = 255 * alpha * Math.pow(d, 0.85);
+    }
+    ctx.putImageData(img, 0, 0);
+    const fctx = flash.getContext("2d");
+    if (weather !== "storm") { fctx.clearRect(0, 0, flash.width, flash.height); return; }
+    const fimg = fctx.createImageData(W, h), fp = fimg.data;
+    for (let y = 0; y < h; y++) for (let x = 0; x < W; x++) {
+      const i = y * w + (x % w), o = (y * W + x) * 4;
+      fp[o] = 225; fp[o + 1] = 230; fp[o + 2] = 255; fp[o + 3] = 255 * dens[i] * (0.35 + 0.65 * light[i]) * 0.8;
+    }
+    fctx.putImageData(fimg, 0, 0);
+  }
+  const DECKS = {
+    clear:   [{ cells: 4, cover: 0.62, soft: 0.16, alpha: 0.5, dur: 300 }, null],
+    partly:  [{ cells: 4, cover: 0.53, soft: 0.2, alpha: 0.75, dur: 260 }, { cells: 3, cover: 0.57, soft: 0.17, alpha: 0.95, dur: 150 }],
+    cloudy:  [{ cells: 5, cover: 0.36, soft: 0.28, alpha: 0.95, dur: 240 }, { cells: 3, cover: 0.45, soft: 0.22, alpha: 0.95, dur: 140 }],
+    drizzle: [{ cells: 5, cover: 0.32, soft: 0.3, alpha: 1, dur: 220 }, { cells: 3, cover: 0.44, soft: 0.24, alpha: 0.95, dur: 130 }],
+    rain:    [{ cells: 5, cover: 0.28, soft: 0.3, alpha: 1, dur: 200 }, { cells: 3, cover: 0.4, soft: 0.24, alpha: 1, dur: 110 }],
+    storm:   [{ cells: 5, cover: 0.22, soft: 0.3, alpha: 1, dur: 150 }, { cells: 3, cover: 0.34, soft: 0.22, alpha: 1, dur: 75 }],
+    snow:    [{ cells: 5, cover: 0.3, soft: 0.32, alpha: 0.95, dur: 260 }, { cells: 3, cover: 0.46, soft: 0.26, alpha: 0.85, dur: 170 }],
+    fog:     [{ cells: 2, cover: 0.18, soft: 0.6, alpha: 0.75, dur: 320, stretch: 4 }, { cells: 3, cover: 0.38, soft: 0.45, alpha: 0.6, dur: 200, stretch: 3.5 }],
+  };
+  const deckEls = [document.getElementById("deckFar"), document.getElementById("deckNear")];
+  const deckLayout = [{ height: 76, top: -10 }, { height: 104, top: -22 }];
+  let decks = [null, null];
+  function buildDecks() {
+    decks = DECKS[weather].map((s, i) => {
+      if (!s) { deckEls[i].style.display = "none"; return null; }
+      deckEls[i].style.display = "";
+      const deck = makeDeck({ ...s, height: deckLayout[i].height, seed: 101 + i * 1000 + Object.keys(DECKS).indexOf(weather) * 7 });
+      deck.spec = s;
+      sizeDeck(deckEls[i], deck, deckLayout[i].top);
+      deckEls[i].firstElementChild.style.animationDuration = `${s.dur}s`;
+      return deck;
+    });
+  }
+
+  // Look B: the far deck, stretched over the window behind the panels and
+  // blurred. Drawn once per repaint; it never moves, so the glass on top
+  // doesn't have to re-blur every frame.
+  const bgClouds = document.getElementById("bgClouds");
+  function paintBgClouds() {
+    const src = (decks[1] || decks[0]) && deckEls[decks[1] ? 1 : 0].firstElementChild.firstElementChild;
+    bgClouds.width = 360; bgClouds.height = 140;
+    const ctx = bgClouds.getContext("2d");
+    ctx.clearRect(0, 0, 360, 140);
+    if (src) ctx.drawImage(src, 0, 0, Math.min(src.width, 720), src.height, 0, 0, 360, 140);
+  }
+
+  // ---------------------------------------------------------------- precip
+  function precipLayer(parent, { tileH, count, draw, speed, sway, scale = 1 }) {
+    const W = Math.ceil(bar.clientWidth * 1.35), r = rng(count * 31 + tileH);
+    const c = document.createElement("canvas");
+    c.width = Math.round(W * scale); c.height = Math.round(tileH * 2 * scale);
+    c.style.width = `${W}px`; c.style.height = `${tileH * 2}px`;
+    const ctx = c.getContext("2d"); ctx.scale(scale, scale);
+    const n = Math.round(count * W / 1000);
+    for (let i = 0; i < n; i++) { const x = r() * W, y = r() * tileH; for (const dy of [0, tileH]) draw(ctx, x, y + dy, r); }
+    const fall = document.createElement("div");
+    fall.className = "fall"; fall.style.setProperty("--tileh", tileH); fall.style.animationDuration = `${tileH / speed}s`;
+    fall.appendChild(c);
+    if (sway) { const s = document.createElement("div"); s.className = "sway"; s.style.animationDuration = `${sway}s`; s.appendChild(fall); parent.appendChild(s); }
+    else parent.appendChild(fall);
+  }
+  const streak = (len, width, alpha) => (ctx, x, y, r) => {
+    const L = len[0] + r() * (len[1] - len[0]), a = alpha[0] + r() * (alpha[1] - alpha[0]);
+    const g = ctx.createLinearGradient(x, y, x, y + L);
+    g.addColorStop(0, "rgba(210,222,240,0)"); g.addColorStop(0.75, `rgba(215,226,245,${a})`); g.addColorStop(1, `rgba(235,242,255,${Math.min(1, a * 1.1)})`);
+    ctx.strokeStyle = g; ctx.lineWidth = width; ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + L); ctx.stroke();
+  };
+  const flake = (size, alpha) => (ctx, x, y, r) => {
+    const s = size[0] + r() * (size[1] - size[0]), a = alpha[0] + r() * (alpha[1] - alpha[0]);
+    const g = ctx.createRadialGradient(x, y, 0, x, y, s);
+    g.addColorStop(0, `rgba(255,255,255,${a})`); g.addColorStop(0.45, `rgba(250,252,255,${a * 0.75})`); g.addColorStop(1, "rgba(250,252,255,0)");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, s, 0, Math.PI * 2); ctx.fill();
+  };
+  function buildPrecip() {
+    const rain = document.getElementById("rain"), snow = document.getElementById("snow");
+    rain.replaceChildren(); snow.replaceChildren();
+    const heavy = { drizzle: 0.35, rain: 1, storm: 1.7 }[weather];
+    if (heavy) {
+      bar.dataset.precip = "rain";
+      rain.style.setProperty("--wind", `${weather === "storm" ? 16 : weather === "drizzle" ? 6 : 10}deg`);
+      const fast = weather === "storm" ? 1.25 : weather === "drizzle" ? 0.7 : 1;
+      precipLayer(rain, { tileH: 160, count: 260 * heavy, speed: 520 * fast, scale: 0.75, draw: streak([7, 13], 0.8, [0.16, 0.3]) });
+      precipLayer(rain, { tileH: 200, count: 120 * heavy, speed: 820 * fast, draw: streak([14, 26], 1, [0.26, 0.45]) });
+      precipLayer(rain, { tileH: 260, count: 34 * heavy, speed: 1250 * fast, draw: streak([30, 50], 1.4, [0.32, 0.55]) });
+    } else if (weather === "snow") {
+      bar.dataset.precip = "snow";
+      precipLayer(snow, { tileH: 128, count: 260, speed: 14, sway: 5, scale: 0.75, draw: flake([0.6, 1.2], [0.4, 0.7]) });
+      precipLayer(snow, { tileH: 160, count: 110, speed: 24, sway: 4, draw: flake([1.2, 2], [0.6, 0.9]) });
+      precipLayer(snow, { tileH: 220, count: 26, speed: 40, sway: 3.2, draw: flake([2.4, 3.6], [0.55, 0.85]) });
+    } else bar.dataset.precip = "";
+  }
+
+  // Look C: beads of rain on glass, and frost. One small tile each, made
+  // once and repeated as a background image.
+  function glassTexture(kind) {
+    const S = 840, c = document.createElement("canvas"); c.width = S; c.height = S;
+    const ctx = c.getContext("2d"), r = rng(kind === "frost" ? 77 : 33);
+    if (kind === "drops") {
+      for (let i = 0; i < 170; i++) {
+        const x = r() * S, y = r() * S, rad = 2.2 + Math.pow(r(), 2) * 10;
+        if (r() < 0.12) { // a drop that has run, leaving a trail
+          const g = ctx.createLinearGradient(x, y - 60 - r() * 80, x, y);
+          g.addColorStop(0, "rgba(255,255,255,0)"); g.addColorStop(1, "rgba(220,230,255,0.07)");
+          ctx.fillStyle = g; ctx.fillRect(x - rad * 0.35, y - 140, rad * 0.7, 140);
+        }
+        // Body: clear in the middle, brighter at the rim, lit from below.
+        let g = ctx.createRadialGradient(x, y + rad * 0.25, rad * 0.1, x, y, rad);
+        g.addColorStop(0, "rgba(220,230,255,0.06)"); g.addColorStop(0.65, "rgba(220,230,255,0.12)"); g.addColorStop(1, "rgba(240,246,255,0.5)");
+        ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, y, rad * 0.92, rad, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = "rgba(0,0,0,0.55)"; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.arc(x, y + 0.6, rad, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+        g = ctx.createRadialGradient(x - rad * 0.35, y - rad * 0.4, 0, x - rad * 0.35, y - rad * 0.4, rad * 0.4);
+        g.addColorStop(0, "rgba(255,255,255,0.95)"); g.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x - rad * 0.35, y - rad * 0.4, rad * 0.4, 0, Math.PI * 2); ctx.fill();
+      }
+      for (let i = 0; i < 900; i++) { // mist of tiny droplets
+        const x = r() * S, y = r() * S; ctx.fillStyle = `rgba(230,238,255,${0.05 + r() * 0.12})`;
+        ctx.beginPath(); ctx.arc(x, y, 0.5 + r() * 0.9, 0, Math.PI * 2); ctx.fill();
+      }
+    } else {
+      for (let i = 0; i < 2600; i++) {
+        const x = r() * S, y = r() * S, s = 0.4 + Math.pow(r(), 3) * 2.2;
+        ctx.fillStyle = `rgba(235,242,255,${0.08 + r() * 0.3})`; ctx.beginPath(); ctx.arc(x, y, s, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.strokeStyle = "rgba(235,242,255,0.18)"; ctx.lineWidth = 0.8;
+      for (let i = 0; i < 70; i++) { // little crystal branches
+        let x = r() * S, y = r() * S, a = r() * Math.PI * 2;
+        ctx.beginPath(); ctx.moveTo(x, y);
+        for (let k = 0; k < 6; k++) { a += (r() - 0.5) * 1.2; x += Math.cos(a) * 6; y += Math.sin(a) * 6; ctx.lineTo(x, y); }
+        ctx.stroke();
+      }
+    }
+    return `url(${c.toDataURL()})`;
+  }
+  app.style.setProperty("--drops-img", glassTexture("drops"));
+  app.style.setProperty("--frost-img", glassTexture("frost"));
+
+  // ---------------------------------------------------------------- lightning
+  const boltCanvas = document.getElementById("bolt");
+  const skyflash = document.getElementById("skyflash");
+  function drawBolt() {
+    const ctx = boltCanvas.getContext("2d"), W = boltCanvas.width, H = boltCanvas.height, r = Math.random;
+    ctx.clearRect(0, 0, W, H);
+    const segs = [];
+    (function branch(x, y, angle, len, depth) {
+      let px = x, py = y;
+      for (let i = 0; i < 10 - depth * 3; i++) {
+        const nx = px + Math.sin(angle) * len + (r() - 0.5) * len * 1.4, ny = py + Math.cos(angle) * len;
+        segs.push([px, py, nx, ny, depth]);
+        if (depth < 2 && r() < 0.22) branch(nx, ny, angle + (r() < 0.5 ? -1 : 1) * (0.5 + r() * 0.5), len * 0.7, depth + 1);
+        px = nx; py = ny; if (py > H) break;
+      }
+    })(W / 2 + (r() - 0.5) * 30, -4, (r() - 0.5) * 0.3, H / 9, 0);
+    for (const [glow, width, color] of [[14, 5, "rgba(170,185,255,0.35)"], [6, 2.4, "rgba(215,225,255,0.85)"], [0, 1.1, "#fff"]]) {
+      ctx.shadowBlur = glow; ctx.shadowColor = "rgba(170,185,255,0.9)"; ctx.strokeStyle = color; ctx.lineCap = "round";
+      for (const [x1, y1, x2, y2, d] of segs) { ctx.lineWidth = width / (d + 1); ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); }
+    }
+    const x = 8 + Math.random() * 84;
+    boltCanvas.style.left = `calc(${x}% - 50px)`;
+    skyflash.style.setProperty("--bolt-x", `${x}%`);
+  }
+  boltCanvas.style.width = "100px"; boltCanvas.style.height = "64px";
+  boltCanvas.addEventListener("animationiteration", drawBolt);
+  drawBolt();
+
+  // ---------------------------------------------------------------- stars & moon
+  function buildStars() {
+    const W = bar.clientWidth, H = bar.clientHeight, r = rng(7);
+    for (const [id, count, bright] of [["stars", 180, [0.25, 0.9]], ["starsTw", 26, [0.7, 1]]]) {
+      const c = document.getElementById(id), dpr = 2;
+      c.width = W * dpr; c.height = H * dpr; c.style.width = `${W}px`; c.style.height = `${H}px`;
+      const ctx = c.getContext("2d"); ctx.scale(dpr, dpr);
+      for (let i = 0; i < Math.round(count * W / 1000); i++) {
+        const x = r() * W, y = r() * H, s = 0.35 + Math.pow(r(), 3) * 0.9, a = bright[0] + r() * (bright[1] - bright[0]), tint = r();
+        ctx.fillStyle = `rgba(${tint < 0.15 ? "200,215,255" : tint > 0.92 ? "255,235,210" : "255,255,255"},${a})`;
+        ctx.beginPath(); ctx.arc(x, y, s, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+  }
+  (function drawMoon() {
+    const c = document.getElementById("moon"), ctx = c.getContext("2d"), S = c.width, R = S / 2 - 1;
+    const age = ((((Date.now() / 864e5 - 10962.76) % 29.530589) + 29.530589) % 29.530589);
+    const phase = (age / 29.530589) * Math.PI * 2, L = [Math.sin(phase), 0, -Math.cos(phase)];
+    const img = ctx.createImageData(S, S), p = img.data;
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const nx = (x + 0.5 - S / 2) / R, ny = (y + 0.5 - S / 2) / R, rr = nx * nx + ny * ny;
+      if (rr > 1) continue;
+      const nz = Math.sqrt(1 - rr), lit = clamp((nx * L[0] + nz * L[2]) * 4 + 0.15);
+      const albedo = 0.82 - smooth(0.5, 0.65, fbm(nx * 2 + 5, ny * 2 + 5, 64, 4, 9)) * 0.25;
+      const v = (0.07 + lit * albedo * 0.93) * 255, o = (y * S + x) * 4;
+      p[o] = v * 0.97; p[o + 1] = v * 0.97; p[o + 2] = v; p[o + 3] = 255 * clamp((1 - Math.sqrt(rr)) * R);
+    }
+    ctx.putImageData(img, 0, 0);
+  })();
+
+  // ---------------------------------------------------------------- sun & sky
+  function sunTimes(date) {
+    const rad = Math.PI / 180;
+    const day = (Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) - Date.UTC(date.getFullYear(), 0, 0)) / 864e5;
+    const g = (2 * Math.PI / 365) * (day - 0.5);
+    const eq = 229.18 * (0.000075 + 0.001868 * Math.cos(g) - 0.032077 * Math.sin(g) - 0.014615 * Math.cos(2 * g) - 0.040849 * Math.sin(2 * g));
+    const decl = 0.006918 - 0.399912 * Math.cos(g) + 0.070257 * Math.sin(g) - 0.006758 * Math.cos(2 * g) + 0.000907 * Math.sin(2 * g) - 0.002697 * Math.cos(3 * g) + 0.00148 * Math.sin(3 * g);
+    const cosH = Math.cos(90.833 * rad) / (Math.cos(LAT * rad) * Math.cos(decl)) - Math.tan(LAT * rad) * Math.tan(decl);
+    const half = Math.acos(Math.min(0.866, Math.max(-0.866, cosH))) / rad * 4 / 60;
+    const noon = (720 - 4 * LON - eq - date.getTimezoneOffset()) / 60;
+    return { r: noon - half, noon, s: noon + half };
+  }
+  const SUN = sunTimes(new Date());
+  function frames({ r, s }) {
+    const night = ["#04040d", "#0f0c24", "#4a5272", "#15172a"];
+    const f = [
+      [0, ...night], [r - 0.75, ...night],
+      [r - 0.25, "#17153a", "#5e3558", "#c98a9a", "#3a2a48"],
+      [r + 0.2, "#21386a", "#c26b4c", "#ffc49a", "#6b5a78"],
+      [r + 1.5, "#1b4d8c", "#4f8bc0", "#fbfcff", "#9eabc2"],
+      [s - 2, "#1f5797", "#5f98c8", "#ffffff", "#a4b1c6"],
+      [s - 0.8, "#2a4a7c", "#c58c4a", "#ffe0b5", "#8c7f8e"],
+      [s, "#2c2452", "#d0582f", "#ffad7d", "#5c3f5c"],
+      [s + 0.5, "#19153a", "#6a2f56", "#a5677f", "#2a1f3a"],
+      [s + 1.1, ...night], [24, ...night],
+    ];
+    let prev = -1;
+    return f.map(([h, ...c]) => { h = Math.max(h, prev + 0.01); prev = h; return [h, ...c.map(hex)]; });
+  }
+  const FRAMES = frames(SUN);
+  function colorsAt(h) {
+    for (let i = 1; i < FRAMES.length; i++) if (h <= FRAMES[i][0]) {
+      const t = (h - FRAMES[i - 1][0]) / (FRAMES[i][0] - FRAMES[i - 1][0] || 1);
+      return FRAMES[i].slice(1).map((c, j) => mix(FRAMES[i - 1][j + 1], c, t));
+    }
+    return FRAMES[0].slice(1);
+  }
+  const WEATHER = {
+    clear:   { grey: 0,    sun: 1,    stars: 1,    diffuse: 0,    strength: 1,    wet: 0 },
+    partly:  { grey: 0.1,  sun: 1,    stars: 0.85, diffuse: 0.2,  strength: 0.9,  wet: 0 },
+    cloudy:  { grey: 0.7,  sun: 0.25, stars: 0.05, diffuse: 0.85, strength: 0.6,  wet: 0 },
+    drizzle: { grey: 0.75, sun: 0.15, stars: 0,    diffuse: 0.9,  strength: 0.55, wet: 0.55 },
+    rain:    { grey: 0.82, sun: 0.1,  stars: 0,    diffuse: 0.95, strength: 0.5,  wet: 0.85 },
+    storm:   { grey: 0.92, sun: 0,    stars: 0,    diffuse: 1,    strength: 0.42, wet: 1 },
+    snow:    { grey: 0.72, sun: 0.2,  stars: 0,    diffuse: 0.8,  strength: 0.65, wet: 0 },
+    fog:     { grey: 0.78, sun: 0.35, stars: 0,    diffuse: 1,    strength: 0.55, wet: 0 },
+  };
+
+  // HSL helpers for the accent color.
+  function rgbToHsl([r, g, b]) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2;
+    if (max === min) return [0, 0, l];
+    const d = max - min, s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    const h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return [h * 60, s, l];
+  }
+  function hslToRgb(h, s, l) {
+    const k = (n) => (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
+    return [0, 8, 4].map((n) => 255 * (l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1))));
+  }
+
+  function fmt(h) { h = ((h % 24) + 24) % 24; const hh = Math.floor(h), mm = Math.floor((h - hh) * 60); return `${(hh + 11) % 12 + 1}:${String(mm).padStart(2, "0")} ${hh < 12 ? "am" : "pm"}`; }
+
+  let lastPaint = "";
+  function render(h) {
+    const w = WEATHER[weather], { r, s } = SUN;
+    let [top, bottom, lit, shade] = colorsAt(h);
+    const dayness = clamp(((h - r) / (s - r)) * 6) * clamp(((s - h) / (s - r)) * 6);
+    const storm = weather === "storm";
+    const greyTop = mix([20, 22, 30], [58, 64, 78], dayness), greyBottom = mix([30, 32, 42], [92, 100, 116], dayness);
+    top = mix(top, mix(greyTop, top, 0.2), w.grey);
+    bottom = mix(bottom, mix(greyBottom, bottom, 0.2), w.grey);
+    lit = mix(lit, mix(mix([60, 64, 80], storm ? [150, 156, 170] : [196, 202, 214], dayness), lit, 0.25), w.grey);
+    shade = mix(shade, mix(mix([16, 18, 26], storm ? [44, 48, 60] : [74, 82, 98], dayness), shade, 0.25), w.grey);
+
+    const t = (h - r) / (s - r), edge = Math.min(t, 1 - t), isDay = t >= 0 && t <= 1;
+    const sunO = clamp((edge + 0.03) * 14) * w.sun;
+    const sunRgb = mix([255, 150, 70], [255, 236, 190], clamp(edge * 6));
+    const nightLen = 24 - s + r, nt = ((((h - s) % 24) + 24) % 24) / nightLen, nEdge = Math.min(nt, 1 - nt);
+    const moonO = nt <= 1 ? clamp((nEdge - 0.04) * 12) * Math.max(w.sun, 0.15) : 0;
+    const daylight = clamp((edge + 0.05) * 8);
+    const sunX = 92 - clamp(t) * 84, moonX = 92 - clamp(nt) * 84;
+
+    for (const [k, v] of Object.entries({
+      "--sun-x": `${sunX}%`, "--sun-y": `${92 - Math.sin(Math.PI * clamp(t)) * 66}%`,
+      "--sun-o": sunO.toFixed(2), "--sun-rgb": trip(sunRgb), "--glare": (sunO * 0.9).toFixed(2),
+      "--moon-x": `${moonX}%`, "--moon-y": `${86 - Math.sin(Math.PI * clamp(nt)) * 56}%`, "--moon-o": moonO.toFixed(2),
+      "--stars": (clamp(1 - daylight * 1.6) * w.stars).toFixed(2),
+    })) bar.style.setProperty(k, v);
+
+    // ---- what the rest of the window takes from the sky
+    // The light outside: warm sun (yellow at midday, orange low down), grey
+    // under cloud, cool and faint by moonlight.
+    const sunLight = mix([255, 150, 70], [255, 214, 110], clamp(edge * 5));
+    const moonLight = [150, 170, 235];
+    let light = mix(moonLight, sunLight, daylight);
+    light = mix(light, mix([110, 118, 150], [178, 190, 212], daylight), w.diffuse * 0.85);
+    const lightA = w.strength * lerp(0.5, 1, daylight) * (isDay || moonO > 0 ? 1 : 0.7);
+    const srcX = isDay ? sunX : moonX;
+    const tilt = Math.atan2(50 - srcX, 140) * 180 / Math.PI;
+
+    // Accent per look: the light's color (A), the sky's (B, D), or a white
+    // touched by the clouds' lit side (C).
+    const [hh, ss] = rgbToHsl(bottom);
+    const skyAccent = hslToRgb(hh, clamp(ss * 1.15, 0.18, 0.7), 0.66);
+    const accent = look.includes("d") || look === "b" ? skyAccent
+      : look === "c" ? mix(lit, [255, 255, 255], 0.45)
+      : mix(light, [255, 255, 255], 0.12);
+
+    for (const [k, v] of Object.entries({
+      "--sky-top": trip(top), "--sky-bottom": trip(bottom), "--sky-lit": trip(lit),
+      "--light": trip(light), "--light-a": lightA.toFixed(2), "--diffuse": w.diffuse,
+      "--src-x": `${srcX}%`, "--beam-w": `${lerp(34, 80, w.diffuse)}deg`, "--beam-tilt": `${(-tilt).toFixed(1)}deg`,
+      "--accent": trip(accent), "--sun-rgb-app": trip(sunRgb), "--sun-glint": (sunO * (1 - w.grey)).toFixed(2), "--wet": w.wet,
+    })) app.style.setProperty(k, v);
+
+    const key = [lit, shade].flat().map((x) => Math.round(x / 3)).join(",") + weather;
+    if (key !== lastPaint) {
+      lastPaint = key;
+      decks.forEach((d, i) => d && paintDeck(deckEls[i], d, lit, shade, d.spec.alpha));
+      paintBgClouds();
+    }
+    timeOut.textContent = fmt(h);
+  }
+
+  function setWeather(wx) {
+    weather = wx;
+    app.dataset.weather = wx;
+    if (WEATHER[wx].wet) app.dataset.wet = ""; else delete app.dataset.wet;
+    weatherButtons.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.w === wx)));
+    buildDecks(); buildPrecip();
+    lastPaint = "";
+    render(+slider.value);
+  }
+
+  const DESC = {
+    a: "<b>Weather light.</b> Keeps today's spotlight idea, but the light is now the light outside: a crisp yellow sunbeam from where the sun is on a clear day, one broad soft grey glow when it's overcast or raining (clouds scatter light), and a faint cool moonbeam at night. Accents take the light's color. Closest to what you have now.",
+    b: "<b>Glass over the sky.</b> The sky carries on behind the whole window, dimmed and blurred, and every panel becomes smoked glass floating in it, like the cards in the iPhone Weather app. The most immersive; also the costliest, because the big panels blur what's behind them (the sky behind them is kept still to help).",
+    c: "<b>Weather on the glass.</b> Panels stay pure black, but the weather touches them: their top edges reflect the sky's color, rain beads on the glass, snow frosts the corners, the sun glints across them, and lightning flickers inside them in time with the top bar. Accents go near-white. The subtlest and cheapest.",
+    d: "<b>Horizon.</b> No beam. The sky's color washes down into the top of each panel, the way Spotify tints a playlist's header from its cover, and the playbar holds a faint reflection like ground under the sky. Accents take the sky's color (blue on a clear day, steel grey in rain, orange at sunset).",
+    "c d": "<b>C + D.</b> The horizon wash for color, plus the weather on the glass for life.",
+  };
+  function setLook(l) {
+    look = l;
+    app.dataset.look = l;
+    lookButtons.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.l === l)));
+    document.getElementById("lookDesc").innerHTML = DESC[l];
+    render(+slider.value);
+  }
+
+  const nowHour = () => { const d = new Date(); return d.getHours() + d.getMinutes() / 60; };
+  slider.value = q.has("h") ? q.get("h") : nowHour();
+  slider.addEventListener("input", () => render(+slider.value));
+  weatherButtons.forEach((b) => b.addEventListener("click", () => setWeather(b.dataset.w)));
+  lookButtons.forEach((b) => b.addEventListener("click", () => setLook(b.dataset.l)));
+  document.getElementById("now").addEventListener("click", () => { slider.value = nowHour(); render(+slider.value); });
+  let timer = null;
+  const play = document.getElementById("play");
+  play.addEventListener("click", () => {
+    if (timer) { clearInterval(timer); timer = null; play.setAttribute("aria-pressed", "false"); return; }
+    play.setAttribute("aria-pressed", "true");
+    timer = setInterval(() => { slider.value = (+slider.value + 0.04) % 24; render(+slider.value); }, 40);
+  });
+
+  function fit() { app.style.transform = `scale(${viewport.clientWidth / 1440})`; }
+  addEventListener("resize", fit);
+  document.addEventListener("visibilitychange", () => app.classList.toggle("paused", document.hidden));
+
+  if (q.has("shot")) document.body.classList.add("shot");
+  fit();
+  buildStars();
+  look = DESC[q.get("look")] ? q.get("look") : "a";
+  setWeather(WEATHER[q.get("w")] ? q.get("w") : "drizzle");
+  setLook(look);
+})();
+</script>
+</body>
+</html>

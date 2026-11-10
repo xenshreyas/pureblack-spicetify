@@ -641,7 +641,10 @@
     // corners, a sun glint and floating dust, drifting fog, and lightning in
     // time with the top bar. Every texture is drawn once into a small tile
     // and after that only moves or fades.
-    const PANELS = ["#Desktop_LeftSidebar_Id", ".BPRPH_jrStQIw2m2qfDl", ".dMf_PkfPVTEuSmc11MZp", '[data-testid="now-playing-bar"]'];
+    const SEARCH_BOX = ".wk0RNS94VA7q0Pp4Y55Z";
+    const SEARCH_RESULTS = ".dz3ZHUphtOgbarQOZrl8";
+    const SEARCH_RESULTS_MAX_HEIGHT = 590;
+    const PANELS = ["#Desktop_LeftSidebar_Id", ".BPRPH_jrStQIw2m2qfDl", ".dMf_PkfPVTEuSmc11MZp", '[data-testid="now-playing-bar"]', SEARCH_RESULTS];
     function tile(S, draw) {
       const c = document.createElement("canvas");
       c.width = S;
@@ -762,7 +765,7 @@
 
     const glasses = new Map(); // panel selector -> { el, timers, key }
     function fillGlass(g) {
-      const W = g.el.clientWidth, H = g.el.clientHeight;
+      const W = g.el.clientWidth, H = g.fixedHeight || g.el.clientHeight;
       if (!W || !H || !g.el.isConnected) return;
       const key = `${scene}@${W}x${H}`;
       if (key === g.key) return;
@@ -837,7 +840,10 @@
           const el = document.createElement("div");
           el.className = "pb-glass";
           el.setAttribute("aria-hidden", "true");
-          g = { el, timers: [], key: "", resize: 0 };
+          // The search list changes height with every keystroke, so its weather
+          // is built once at full height and clipped, which keeps it from
+          // restarting while you type.
+          g = { el, timers: [], key: "", resize: 0, fixedHeight: selector === SEARCH_RESULTS ? SEARCH_RESULTS_MAX_HEIGHT : 0 };
           new ResizeObserver(() => {
             clearTimeout(g.resize);
             g.resize = setTimeout(() => fillGlass(g), 250);
@@ -846,9 +852,22 @@
         }
         if (g.el.parentElement !== host) {
           host.appendChild(g.el);
-          g.key = "";
+          if (!g.fixedHeight) g.key = "";
+          else if (SCENES[scene]) fillGlass(g);
         }
       }
+    }
+
+    // Spotify replaces the search list as you type, so put the weather back
+    // straight away instead of waiting for the next periodic check.
+    let watchedSearch = null;
+    const searchWatcher = new MutationObserver(mountGlass);
+    function watchSearch() {
+      const box = document.querySelector(SEARCH_BOX);
+      if (!box || box === watchedSearch) return;
+      watchedSearch = box;
+      searchWatcher.disconnect();
+      searchWatcher.observe(box, { childList: true, subtree: true });
     }
 
     function setScene(next) {
@@ -904,6 +923,7 @@
     // place every few seconds (one query, nothing else).
     function mount() {
       mountGlass();
+      watchSearch();
       const bar = document.querySelector(TOP_BAR);
       if (!bar) return;
       if (root.parentElement !== bar) {

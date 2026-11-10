@@ -145,7 +145,8 @@ img[src*="equaliser-green"] {
    lighter wash. */
 #Desktop_LeftSidebar_Id::after,
 .BPRPH_jrStQIw2m2qfDl::after,
-.dMf_PkfPVTEuSmc11MZp::after {
+.dMf_PkfPVTEuSmc11MZp::after,
+.dz3ZHUphtOgbarQOZrl8::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -163,6 +164,27 @@ img[src*="equaliser-green"] {
 #Desktop_LeftSidebar_Id,
 .dMf_PkfPVTEuSmc11MZp {
   --pb-wash: 0.6;
+}
+
+/* Search results: a panel like the others, with the same sky wash and
+   weather. Spotify gives the outer box a fixed height and insets the visible
+   list by 4px, so the box is made to fit the list and the layers match it. */
+.dz3ZHUphtOgbarQOZrl8.axekw0B8rNto2T6p2r6x {
+  height: auto;
+}
+.HrbnNN7vkqezs06y4T6p {
+  background-color: #060608;
+  border-radius: var(--pb-radius-outer);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.7), 0 6px 12px rgba(0, 0, 0, 0.4);
+}
+.dz3ZHUphtOgbarQOZrl8::after,
+.dz3ZHUphtOgbarQOZrl8 > .pb-glass {
+  inset: 4px 0;
+}
+.dz3ZHUphtOgbarQOZrl8:not(.axekw0B8rNto2T6p2r6x) .pb-glass *,
+.dz3ZHUphtOgbarQOZrl8:not(.axekw0B8rNto2T6p2r6x) .pb-glass *::before,
+.dz3ZHUphtOgbarQOZrl8:not(.axekw0B8rNto2T6p2r6x) .pb-glass *::after {
+  animation-play-state: paused !important;
 }
 
 /* Weather on the glass (theme.js builds one .pb-glass in each panel and the

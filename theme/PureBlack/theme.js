@@ -781,7 +781,9 @@
         parent.appendChild(el);
         return el;
       };
-      if (SCENES[scene].wet) {
+      if (SCENES[scene].wet && water && water.ok) {
+        // The water layer covers rain; only the lightning below is added here.
+      } else if (SCENES[scene].wet) {
         texture("drop");
         texture("beads").forEach((img, i) => add("pbg-beads", { backgroundImage: img, animationDelay: `${-i * 10 - ((left / 97) % 10)}s` }));
         const n = Math.max(1, Math.round(((W * H) / 110000) * { drizzle: 0.7, rain: 1.3, storm: 2.1 }[scene]));
@@ -965,10 +967,608 @@
       get scene() {
         return scene;
       },
+      get stormStart() {
+        return stormStart;
+      },
     };
   }
 
+  // Water on the glass while it rains: a small simulation of drops that land,
+  // merge, grow until they can't hold on, run, stall and dry, leaving thin wet
+  // tracks behind them. Everything is stamped into height maps on the GPU, and
+  // one shader then lights them, so each drop is a lens showing an upside-down
+  // image of the real sky. Nothing runs unless it's raining and Spotify is
+  // visible. Returns { ok: false } where WebGL2 isn't available.
+  function startWater(getStormStart) {
+    const ROOT = ".PbMBx95owTmQYYdfnp3j", BAR = ".EmXZMILXH0bP7U461Va6";
+    const WEATHER = {
+      drizzle: { spawn: 5, rMin: 1.0, rMax: 4.6, max: 220, fieldRate: 110, fieldMax: 2.7, wind: 0.015, rc: [6, 9.5], feed: 0.04 },
+      rain: { spawn: 15, rMin: 1.3, rMax: 7.4, max: 340, fieldRate: 300, fieldMax: 3.9, wind: 0.03, rc: [4.8, 8], feed: 0.1 },
+      storm: { spawn: 38, rMin: 1.5, rMax: 8.8, max: 460, fieldRate: 480, fieldMax: 4.6, wind: 0.14, rc: [4.8, 7.8], feed: 0.17 },
+    };
+    const rand = Math.random;
+    const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+    const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+    const wander = (key, time, a, b) => Math.sin(key + time * a) * 0.6 + Math.sin(key * 1.7 + time * b) * 0.4;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+    const canvas = document.createElement("canvas");
+    canvas.id = "pb-water";
+    canvas.setAttribute("aria-hidden", "true");
+    canvas.style.display = "none";
+    const gl = canvas.getContext("webgl2", { alpha: true, premultipliedAlpha: true, antialias: false });
+    if (!gl) return { ok: false, sync() {} };
+
+    // ---- sprites, in one atlas: a round drop, a solid block for wiping, and
+    // a drop with a tail. RGB is the surface (normal x, normal y, thickness);
+    // alpha is a soft skirt so neighbours bridge together before they touch.
+    const ATLAS = 192, EDGE = 0.775, HEAD_R = 0.42, HEAD_Y = 0.55;
+    const TAIL_ROWS = Math.round(((HEAD_Y + 1) / 2) * ATLAS);
+    const UV_ROUND = [0, 0, 0.5, 0.5], UV_SOLID = [0.1, 0.6, 0.4, 0.9];
+    const UV_TAIL = [0.5, 0, 1, TAIL_ROWS / ATLAS], UV_HEAD = [0.5, TAIL_ROWS / ATLAS, 1, 1];
+    function atlasPixels() {
+      const px = new Uint8Array(ATLAS * ATLAS * 4);
+      const put = (i, j, nx, ny, depth, alpha) => {
+        const k = (j * ATLAS + i) * 4;
+        px[k] = (127.5 + nx * 127.5) * alpha;
+        px[k + 1] = (127.5 + ny * 127.5) * alpha;
+        px[k + 2] = 255 * depth * alpha;
+        px[k + 3] = 255 * alpha;
+      };
+      for (let j = 0; j < 96; j++) for (let i = 0; i < 96; i++) {
+        const u = ((i + 0.5) / 96) * 2 - 1, v = ((j + 0.5) / 96) * 2 - 1, r = Math.hypot(u, v);
+        if (r >= 1) continue;
+        // A drop sitting on glass: flat on top, steep at the edge.
+        const rr = Math.min(r / EDGE, 1), slope = Math.pow(rr, 1.7) * 0.97;
+        put(i, j, r ? (u / r) * slope : 0, r ? (v / r) * slope : 0, Math.sqrt(Math.max(0, 1 - rr * rr)), 1 - smooth(0.55, 1, r));
+      }
+      px.fill(255, 96 * ATLAS * 4, ATLAS * ATLAS * 4);
+      for (let j = 96; j < ATLAS; j++) for (let i = 96; i < ATLAS; i++) px.fill(0, (j * ATLAS + i) * 4, (j * ATLAS + i) * 4 + 4);
+      for (let j = 0; j < ATLAS; j++) for (let i = 0; i < 96; i++) {
+        const u = ((i + 0.5) / 96) * 2 - 1, v = ((j + 0.5) / ATLAS) * 2 - 1;
+        let ratio, dx, dy;
+        if (v >= HEAD_Y) {
+          const ey = v - HEAD_Y, rho = Math.hypot(u, ey);
+          ratio = rho / HEAD_R; dx = rho ? u / rho : 0; dy = rho ? ey / rho : 0;
+        } else {
+          ratio = Math.abs(u) / Math.max(0.012, HEAD_R * Math.pow(smooth(-1, HEAD_Y, v), 1.25));
+          dx = Math.sign(u); dy = -0.14;
+        }
+        if (ratio >= 1.28) continue;
+        const rr = Math.min(ratio, 1), slope = Math.pow(rr, 1.7) * 0.97;
+        put(96 + i, j, dx * slope, dy * slope, Math.sqrt(Math.max(0, 1 - rr * rr)), 1 - smooth(0.74, 1.26, ratio));
+      }
+      return px;
+    }
+
+    // ---- stamping: lists of quads, flushed to a height map in one draw.
+    const FLOATS = 10;
+    let instances = new Float32Array(FLOATS * 4096);
+    const quad = (list, uv, cx, cy, hw, hh, c = 1, s = 0) => list.push(cx, cy, hw, hh, c, s, uv[0], uv[1], uv[2], uv[3]);
+    const stamp = (list, x, y, rx, ry, c, s) => quad(list, UV_ROUND, x, y, rx / EDGE, ry / EDGE, c, s);
+    function tadpole(list, x, y, r, tail, lean, squeeze, c = 1, s = 0) {
+      const hw = (r / HEAD_R) * squeeze, unit = r / HEAD_R, h = (1 - HEAD_Y) * unit;
+      const place = (lx, ly) => [x + lx * c - ly * s, y + lx * s + ly * c];
+      const [hx, hy] = place(0, h / 2), [tx, ty] = place(-lean, -tail / 2);
+      quad(list, UV_HEAD, hx, hy, hw, h / 2, c, s);
+      quad(list, UV_TAIL, tx, ty, hw, tail / 2, c, s);
+    }
+
+    let stampProgram, lightProgram, uStamp, uLight, instanceBuffer, atlas, world;
+    let dropsLayer, fieldLayer, trackLayer;
+    let W = 0, H = 0, P = 1, cfg = null, skyKey = "";
+    const dropsList = [], fieldBefore = [], wipes = [], fieldAfter = [], tracks = [];
+
+    const VERT_STAMP = `#version 300 es
+      layout(location=0) in vec2 c;
+      layout(location=1) in vec4 q;
+      layout(location=2) in vec2 r;
+      layout(location=3) in vec4 u;
+      uniform vec2 S; out vec2 t;
+      void main(){
+        vec2 p=c*q.zw; p=vec2(p.x*r.x-p.y*r.y,p.x*r.y+p.y*r.x)+q.xy;
+        t=mix(u.xy,u.zw,c*.5+.5);
+        gl_Position=vec4(p/S*2.-1.,0.,1.);
+      }`;
+    const FRAG_STAMP = `#version 300 es
+      precision mediump float;
+      in vec2 t; out vec4 o; uniform sampler2D A; uniform float G;
+      void main(){ o=texture(A,t)*G; }`;
+    const VERT_LIGHT = `#version 300 es
+      layout(location=0) in vec2 c; out vec2 v;
+      void main(){ v=vec2(c.x*.5+.5,.5-c.y*.5); gl_Position=vec4(c,0.,1.); }`;
+    const FRAG_LIGHT = `#version 300 es
+      precision highp float;
+      in vec2 v; out vec4 o;
+      uniform sampler2D D,M,W,K; uniform vec2 S; uniform float F;
+      float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+      float n(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+        return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}
+      vec4 solid(vec4 x){return vec4(x.rgb/max(x.a,.004),x.a);}
+      // rgb is the light the drop adds; a is how much behind it still shows.
+      vec4 lens(vec4 t,float lod,float glint){
+        vec2 m=t.rg*2.-1.; float l=min(length(m),1.), z=sqrt(max(0.,1.-l*l));
+        vec2 w=clamp(vec2(.5)-m*vec2(.47,.5)+(v-.5)*vec2(.14,.1),.002,.998);
+        vec3 c=mix(textureLod(W,w,lod+2.).rgb,textureLod(W,w,lod).rgb,.18);
+        float up=smoothstep(.25,-.75,m.y), edge=smoothstep(.5,1.,l);
+        float cres=smoothstep(-.1,.72,m.y)*smoothstep(1.,.66,l);
+        c*=(.16+1.05*cres)*(1.+F*2.4);
+        vec3 N=normalize(vec3(m,z*1.25+.08));
+        vec3 H=normalize(normalize(vec3(-.4,-.74,.6))+vec3(0,0,1));
+        float d=max(dot(N,H),0.);
+        c+=(pow(d,520.)*2.4+pow(d,90.)*.06)*(glint+F*2.);
+        return vec4(c,mix(.72-.5*up,.06+.22*(1.-up),edge));
+      }
+      void main(){
+        vec4 d=texture(D,v), m=texture(M,v), k=texture(K,v);
+        float below=texture(D,v+vec2(.5,-1.8)/S).a;
+        if(d.a<.04&&m.a<.04&&k.a<.04&&below<.08){o=vec4(0);return;}
+        d=solid(d); m=solid(m); k=solid(k);
+        vec2 q=v*S;
+        float th=.5+(n(q/34.)-.5)*.08+(n(q/10.)-.5)*.025;
+        float aa=fwidth(d.a)*1.4+.01;
+        float e=smoothstep(th-aa,th+aa,d.a);
+        float mth=.47+(n(q/11.)-.5)*.1, maa=fwidth(m.a)*1.3+.01;
+        float em=smoothstep(mth-maa,mth+maa,m.a)*(1.-e);
+        vec3 c=vec3(0); float a=0.;
+        if(e>0.){ vec4 L=lens(d,1.,.95); c+=L.rgb*e; a+=(1.-L.a)*e; }
+        if(em>0.){ vec4 L=lens(m,1.,.85); c+=L.rgb*em*.92; a+=(1.-L.a)*em*.9; }
+        float et=smoothstep(.44,.6,k.a)*(1.-e)*(1.-em);
+        if(et>0.){ vec4 L=lens(k,1.2,.5); c+=L.rgb*et*.6; a+=(.1+(1.-L.a)*.22)*et; }
+        a+=(1.-a)*smoothstep(.34,.7,below)*.13*(1.-e);
+        o=vec4(c,a);
+      }`;
+    function program(vs, fs, names) {
+      const p = gl.createProgram();
+      for (const [type, src] of [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]]) {
+        const s = gl.createShader(type);
+        gl.shaderSource(s, src);
+        gl.compileShader(s);
+        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+        gl.attachShader(p, s);
+      }
+      gl.linkProgram(p);
+      if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+      const u = {};
+      for (const name of names) u[name] = gl.getUniformLocation(p, name);
+      return [p, u];
+    }
+    function texture(unit, mips) {
+      const t = gl.createTexture();
+      gl.activeTexture(gl.TEXTURE0 + unit);
+      gl.bindTexture(gl.TEXTURE_2D, t);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, mips ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      return t;
+    }
+    function layer(unit) {
+      const tex = texture(unit, false);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, Math.max(1, Math.round(W * P)), Math.max(1, Math.round(H * P)), 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      const fbo = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      return { tex, fbo, unit };
+    }
+    function setupGL() {
+      [stampProgram, uStamp] = program(VERT_STAMP, FRAG_STAMP, ["S", "A", "G"]);
+      [lightProgram, uLight] = program(VERT_LIGHT, FRAG_LIGHT, ["S", "D", "M", "W", "K", "F"]);
+      gl.bindVertexArray(gl.createVertexArray());
+      gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      instanceBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+      const stride = FLOATS * 4;
+      [[1, 4, 0], [2, 2, 16], [3, 4, 24]].forEach(([loc, size, offset]) => {
+        gl.enableVertexAttribArray(loc);
+        gl.vertexAttribPointer(loc, size, gl.FLOAT, false, stride, offset);
+        gl.vertexAttribDivisor(loc, 1);
+      });
+      atlas = texture(4, false);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, ATLAS, ATLAS, 0, gl.RGBA, gl.UNSIGNED_BYTE, atlasPixels());
+      world = texture(2, true);
+      gl.useProgram(lightProgram);
+      gl.uniform1i(uLight.D, 0);
+      gl.uniform1i(uLight.M, 1);
+      gl.uniform1i(uLight.W, 2);
+      gl.uniform1i(uLight.K, 3);
+      gl.useProgram(stampProgram);
+      gl.uniform1i(uStamp.A, 4);
+      skyKey = "";
+      allocate();
+    }
+    function allocate() {
+      for (const old of [dropsLayer, fieldLayer, trackLayer]) {
+        if (!old) continue;
+        gl.deleteTexture(old.tex);
+        gl.deleteFramebuffer(old.fbo);
+      }
+      dropsLayer = layer(0); fieldLayer = layer(1); trackLayer = layer(3);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    }
+    function target(l) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, l.fbo);
+      gl.viewport(0, 0, Math.round(W * P), Math.round(H * P));
+    }
+    function beginStamps() {
+      gl.useProgram(stampProgram);
+      gl.uniform2f(uStamp.S, W, H);
+      gl.uniform1f(uStamp.G, 1);
+      gl.enable(gl.BLEND);
+      gl.blendEquation(gl.FUNC_ADD);
+    }
+    function flush(list, wipe) {
+      if (!list.length) return;
+      const n = list.length / FLOATS;
+      if (list.length > instances.length) instances = new Float32Array(list.length * 2);
+      instances.set(list);
+      gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, instances.subarray(0, list.length), gl.DYNAMIC_DRAW);
+      if (wipe) gl.blendFunc(gl.ZERO, gl.ONE_MINUS_SRC_ALPHA);
+      else gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, n);
+      list.length = 0;
+    }
+    // Drying: a proportional fade, plus a small constant one so faint
+    // leftovers really reach zero instead of building up into a film.
+    function fade(l, amount) {
+      target(l);
+      const all = [];
+      quad(all, UV_SOLID, W / 2, H / 2, W / 2, H / 2);
+      gl.uniform1f(uStamp.G, amount);
+      flush(all, true);
+      quad(all, UV_SOLID, W / 2, H / 2, W / 2, H / 2);
+      gl.uniform1f(uStamp.G, 1 / 255);
+      gl.blendEquation(gl.FUNC_REVERSE_SUBTRACT);
+      gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(all), gl.DYNAMIC_DRAW);
+      gl.blendFunc(gl.ONE, gl.ONE);
+      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, 1);
+      gl.blendEquation(gl.FUNC_ADD);
+      gl.uniform1f(uStamp.G, 1);
+    }
+
+    // ---- simulation
+    let drops = [], time = 0, lastDry = 0;
+    function lumps(r) {
+      if (r < 2.4) return [];
+      const n = 2 + Math.floor(rand() * 3), out = [];
+      for (let i = 0; i < n; i++) out.push({ a: rand() * 6.283, d: 0.22 + rand() * 0.42, s: 0.5 + rand() * 0.32, y: 0.9 + rand() * 0.3 });
+      return out;
+    }
+    const holdLimit = () => cfg.rc[0] + rand() * (cfg.rc[1] - cfg.rc[0]);
+    function addDrop(x, y, r, landing) {
+      drops.push({ x, y, r, born: time, land: landing ? 0.08 : 0, vx: 0, vy: 0, running: false, rc: holdLimit(), key: rand() * 1000, lumps: lumps(r), wobble: 0, wobbleAt: 0, evap: 0.012 + rand() * 0.04, lastBead: y, gap: 8 });
+    }
+    // The dense field of small drops. Many are lumpy or have a short tail.
+    function fieldDrop(list, x, y, r) {
+      if (r <= 1.25) { stamp(list, x, y, r, r * (0.95 + rand() * 0.45)); return; }
+      if (rand() < 0.3) {
+        const lean = (rand() - 0.5) * 1.1, c = Math.cos(lean), s = Math.sin(lean);
+        tadpole(list, x, y, r * 0.76, r * (1.9 + rand() * rand() * 4), r * (rand() - 0.5) * 1.1, 0.86, c, s);
+        const a = rand() * 6.283, lr = r * (0.4 + rand() * 0.3), lx = Math.cos(a) * r * 0.5, ly = r * 0.2 + Math.sin(a) * r * 0.42;
+        stamp(list, x + lx * c - ly * s, y + lx * s + ly * c, lr, lr * (0.9 + rand() * 0.5), c, s);
+        return;
+      }
+      stamp(list, x, y, r * 0.84, r * (0.95 + rand() * 0.5));
+      const n = 1 + Math.floor(rand() * 2.4);
+      for (let i = 0; i < n; i++) {
+        const a = rand() * 6.283, dist = r * (0.3 + rand() * 0.45), lr = r * (0.42 + rand() * 0.34);
+        stamp(list, x + Math.cos(a) * dist, y + Math.sin(a) * dist, lr, lr * (0.9 + rand() * 0.5));
+      }
+    }
+    // Water gathers unevenly, so density varies across the glass in patches.
+    const patch = (x, y) => 0.42 + 0.29 * Math.sin(x * 0.011 + y * 0.004 + 1.3) + 0.29 * Math.sin(x * 0.006 - y * 0.013 + 4.1);
+    function sprinkle() {
+      for (let i = 0; i < 6; i++) {
+        const x = rand() * W, y = rand() * H;
+        if (rand() > patch(x, y)) continue;
+        fieldDrop(fieldBefore, x, y, 0.36 + Math.pow(rand(), 3.1) * cfg.fieldMax);
+        return;
+      }
+    }
+    function landDrop() {
+      const r = cfg.rMin * Math.pow(cfg.rMax / cfg.rMin, Math.pow(rand(), 2.3)), x = rand() * W, y = rand() * H;
+      addDrop(x, y, r, true);
+      if (r <= 3) return;
+      for (let i = 1 + Math.floor(rand() * 4); i > 0; i--) {
+        const a = rand() * 6.283, dist = r * (1.6 + rand() * 2.6);
+        fieldDrop(fieldBefore, x + Math.cos(a) * dist, y + Math.sin(a) * dist, 0.5 + rand() * 0.8);
+      }
+    }
+    function merge() {
+      const CELL = 26, grid = new Map(), id = (cx, cy) => cx + cy * 4096;
+      for (const d of drops) {
+        const c = id(Math.floor(d.x / CELL), Math.floor(d.y / CELL));
+        const list = grid.get(c);
+        if (list) list.push(d); else grid.set(c, [d]);
+      }
+      for (const a of drops) {
+        if (a.dead) continue;
+        const cx = Math.floor(a.x / CELL), cy = Math.floor(a.y / CELL);
+        for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
+          const list = grid.get(id(cx + i, cy + j));
+          if (!list) continue;
+          for (const b of list) {
+            if (b === a || b.dead || a.dead) continue;
+            const reach = (a.r + b.r) * 0.8, dx = a.x - b.x, dy = a.y - b.y;
+            if (dx * dx + dy * dy > reach * reach) continue;
+            const [big, small] = a.running !== b.running ? (a.running ? [a, b] : [b, a]) : a.r >= b.r ? [a, b] : [b, a];
+            const vb = big.r ** 3, vs = small.r ** 3, f = vs / (vb + vs);
+            big.x += (small.x - big.x) * f * (big.running ? 0.35 : 1);
+            big.y += (small.y - big.y) * f * (big.running ? 0.15 : 1);
+            big.r = Math.cbrt(vb + vs);
+            big.wobble = clamp(big.wobble + 0.5 + f * 2, 0, 1.4);
+            big.wobbleAt = time;
+            if (big.running) big.vy *= 0.8 + 0.2 * (1 - f);
+            else big.lumps = lumps(big.r);
+            small.dead = true;
+          }
+        }
+      }
+    }
+    function moveRunner(d, dt) {
+      // Heavier drops move faster, and every drop keeps catching on the glass.
+      let target_ = 16 + 165 * Math.pow(Math.max(0, d.r - 3.6) / 6, 1.5);
+      const grip = wander(d.key, time, 1.7, 3.9);
+      target_ *= grip < -0.22 ? 0.05 : 1 + grip * 0.55;
+      d.vy += (target_ - d.vy) * clamp(dt * (target_ < d.vy ? 9 : 2.4));
+      const drift = cfg.wind + wander(d.key * 2, time, 0.9, 2.3) * 0.07 + wander(d.key * 3, d.y * 0.055, 1, 2.7) * 0.3;
+      d.vx += (drift * d.vy - d.vx) * clamp(dt * 5);
+      const px = d.x, py = d.y;
+      d.x += d.vx * dt;
+      d.y += d.vy * dt;
+      // Clear a band through the small drops and leave a thin wet track.
+      const dx = d.x - px, dy = d.y - py, length = Math.hypot(dx, dy);
+      if (length > 0.001) {
+        quad(wipes, UV_SOLID, (px + d.x) / 2, (py + d.y) / 2, d.r * 1.35, length / 2, dy / length, -dx / length);
+        const steps = Math.ceil(length / 1.25);
+        for (let i = 1; i <= steps; i++) {
+          const k = i / steps, width = Math.max(0.65, d.r * (0.11 + 0.06 * (1 + wander(d.key, py * 0.08 + k, 1, 2.2))));
+          stamp(tracks, px + dx * k + (rand() - 0.5) * 0.3, py + dy * k - d.r * 0.6, width, width * 1.7);
+        }
+      }
+      if (d.y - d.lastBead > d.gap) {
+        d.lastBead = d.y;
+        d.gap = (9 + rand() * 24) * (rand() < 0.22 ? 2.4 : 1);
+        const bead = d.r * (0.12 + 0.3 * Math.pow(rand(), 1.6));
+        fieldDrop(fieldAfter, d.x + (rand() - 0.5) * d.r * 1.6, d.y - d.r * 1.4, bead);
+        d.r = Math.cbrt(Math.max(0.1, d.r ** 3 - bead ** 3 * 0.6));
+      }
+      if (d.r < d.rc * 0.6) { d.running = false; d.vx = d.vy = 0; d.rc = d.r * 1.9 + rand() * 2; d.lumps = lumps(d.r); }
+      if (d.y - d.r * 4 > H) d.dead = true;
+    }
+    function step(dt) {
+      time += dt;
+      for (let n = cfg.spawn * dt * (drops.length > cfg.max ? 0.15 : 1); n > 0; n--) if (n >= 1 || rand() < n) landDrop();
+      for (let n = cfg.fieldRate * dt; n > 0; n--) if (n >= 1 || rand() < n) sprinkle();
+      merge();
+      for (const d of drops) {
+        if (d.dead) continue;
+        if (!d.running && d.r > d.rc) { d.running = true; d.lastBead = d.y; d.gap = 6 + rand() * 20; }
+        if (d.running) moveRunner(d, dt);
+        else {
+          // Bigger drops catch more rain; small ones dry out.
+          if (d.r > 2.8) d.r += cfg.feed * (0.5 + d.key / 1000) * dt;
+          else d.r -= d.evap * (drops.length > cfg.max ? 5 : 1) * dt;
+          if (d.r < 0.5) d.dead = true;
+        }
+      }
+      drops = drops.filter((d) => !d.dead);
+      beginStamps();
+      target(fieldLayer);
+      flush(fieldBefore);
+      flush(wipes, true);
+      flush(fieldAfter);
+      target(trackLayer);
+      flush(tracks);
+      if (time - lastDry > 0.6) {
+        lastDry = time;
+        fade(fieldLayer, 0.0095);
+        fade(trackLayer, 0.026);
+      }
+    }
+
+    // ---- what the drops look at: the theme's sky above a dark skyline.
+    const view = document.createElement("canvas");
+    view.width = 512; view.height = 320;
+    const shade = (c, k = 1, a = 1) => `rgba(${c.map((v) => Math.min(255, Math.round(v * k))).join(",")},${a})`;
+    function paintView(top, bottom, lit) {
+      const lum = (c) => (0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2]) / 255;
+      const night = 1 - smooth(0.12, 0.42, lum(bottom)), gain = Math.min(3.4, 0.92 / Math.max(0.1, lum(bottom) + 0.1));
+      const c = view.getContext("2d"), w = view.width, h = view.height, horizon = h * 0.72;
+      const sky_ = c.createLinearGradient(0, 0, 0, horizon);
+      sky_.addColorStop(0, shade(top, gain * 1.15));
+      sky_.addColorStop(0.65, shade(bottom, gain));
+      sky_.addColorStop(1, shade(lit, gain * 1.2));
+      c.fillStyle = sky_;
+      c.fillRect(0, 0, w, h);
+      let s = 91;
+      const r = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+      for (let i = 0; i < 70; i++) {
+        const x = r() * w, y = r() * horizon * 0.95, R = 18 + r() * 70, tone = r() < 0.6 ? lit : top, k = tone === lit ? gain * 1.35 : gain * 0.7;
+        const g = c.createRadialGradient(x, y, 0, x, y, R);
+        g.addColorStop(0, shade(tone, k, 0.2));
+        g.addColorStop(1, shade(tone, k, 0));
+        c.fillStyle = g;
+        c.fillRect(x - R, y - R, 2 * R, 2 * R);
+      }
+      const ground = c.createLinearGradient(0, horizon, 0, h);
+      ground.addColorStop(0, shade(top, 0.32));
+      ground.addColorStop(1, shade(top, 0.1));
+      c.fillStyle = ground;
+      c.fillRect(0, horizon, w, h - horizon);
+      for (let x = 0; x < w;) {
+        const bw = 10 + r() * 34, bh = 6 + r() * 34;
+        c.fillStyle = shade(top, 0.14 + r() * 0.1);
+        c.fillRect(x, horizon - bh, bw, bh + 3);
+        x += bw;
+      }
+      c.globalCompositeOperation = "lighter";
+      for (let i = 26 + night * 150; i > 0; i--) {
+        const x = r() * w, y = horizon - 14 + r() * (h - horizon + 10), R = 1 + r() * 2.6;
+        const col = [[255, 205, 140], [255, 170, 110], [190, 225, 255], [255, 110, 100]][Math.floor(r() * 3.3)], a = (0.28 + night * 0.7) * (0.4 + r() * 0.6);
+        const g = c.createRadialGradient(x, y, 0, x, y, R * 2.4);
+        g.addColorStop(0, shade(col, 1, a));
+        g.addColorStop(1, shade(col, 1, 0));
+        c.fillStyle = g;
+        c.fillRect(x - R * 3, y - R * 3, R * 6, R * 6);
+      }
+      c.globalCompositeOperation = "source-over";
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, world);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, view);
+      gl.generateMipmap(gl.TEXTURE_2D);
+    }
+    function syncView() {
+      const style = document.documentElement.style, read = (name) => style.getPropertyValue(name);
+      const key = read("--pb-sky-top") + read("--pb-sky-bottom") + read("--pb-sky-lit");
+      if (key === skyKey || !key) return;
+      skyKey = key;
+      const triple = (name) => read(name).split(",").map(Number);
+      paintView(triple("--pb-sky-top"), triple("--pb-sky-bottom"), triple("--pb-sky-lit"));
+    }
+
+    // ---- drawing
+    function drawDrops() {
+      for (const d of drops) {
+        const speed = clamp(d.vy / 240);
+        if (d.running) {
+          // Slow drops are round and lumpy; a tail only pulls out at speed.
+          const lump = 1 - speed;
+          stamp(dropsList, d.x, d.y, d.r * (0.92 - speed * 0.08), d.r * (0.98 + speed * 0.3));
+          for (const l of d.lumps) stamp(dropsList, d.x + Math.cos(l.a) * d.r * l.d * lump, d.y + Math.sin(l.a) * d.r * l.d * lump, d.r * l.s * (0.7 + speed * 0.2), d.r * l.s * l.y);
+          if (speed > 0.16) {
+            const grow = clamp((speed - 0.16) / 0.3), hw = (d.r * (0.42 + grow * 0.46)) / HEAD_R, tail = d.r * (0.4 + speed * 4);
+            quad(dropsList, UV_TAIL, d.x - d.vx * 0.05, d.y - tail / 2, hw, tail / 2);
+          }
+          continue;
+        }
+        let k = 1;
+        if (d.land) { const a = clamp((time - d.born) / d.land); k = 0.45 + 0.55 * (1 - (1 - a) ** 3); }
+        const age = time - d.wobbleAt, w = d.wobble ? d.wobble * Math.exp(-age * 6.5) * Math.sin(age * 34) * 0.16 : 0;
+        const r = d.r * k, sag = 1 + clamp(d.r / 26, 0, 0.22);
+        if (!d.lumps.length) { stamp(dropsList, d.x, d.y, r * (1 + w), r * (1 - w) * sag); continue; }
+        stamp(dropsList, d.x, d.y + r * 0.08, r * 0.88 * (1 + w), r * 0.88 * (1 - w) * sag);
+        for (const l of d.lumps) stamp(dropsList, d.x + Math.cos(l.a) * r * l.d, d.y + Math.sin(l.a) * r * l.d, r * l.s, r * l.s * l.y);
+      }
+    }
+    // Lightning, following the same 9.7s timing as the top bar's flash.
+    const FLASH = [[0.6, 0], [0.604, 1], [0.61, 0.2], [0.616, 0.9], [0.63, 0.35], [0.66, 0]];
+    function flash() {
+      if (cfg !== WEATHER.storm) return 0;
+      const p = (((performance.now() - getStormStart()) / 1000) % 9.7) / 9.7;
+      for (let i = 1; i < FLASH.length; i++) {
+        if (p < FLASH[i][0] && p >= FLASH[i - 1][0]) return FLASH[i - 1][1] + ((p - FLASH[i - 1][0]) / (FLASH[i][0] - FLASH[i - 1][0])) * (FLASH[i][1] - FLASH[i - 1][1]);
+      }
+      return 0;
+    }
+    function render() {
+      syncView();
+      drawDrops();
+      beginStamps();
+      target(dropsLayer);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      flush(dropsList);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.disable(gl.BLEND);
+      gl.useProgram(lightProgram);
+      gl.uniform2f(uLight.S, W, H);
+      gl.uniform1f(uLight.F, Math.min(1, flash() * 1.3));
+      for (const l of [dropsLayer, fieldLayer, trackLayer]) {
+        gl.activeTexture(gl.TEXTURE0 + l.unit);
+        gl.bindTexture(gl.TEXTURE_2D, l.tex);
+      }
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    }
+
+    // ---- layout and running
+    function begin() {
+      drops = []; time = 0; lastDry = 0;
+      fieldBefore.length = wipes.length = fieldAfter.length = tracks.length = 0;
+      for (const l of [fieldLayer, trackLayer]) { target(l); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); }
+      for (let i = cfg.fieldRate * 38; i > 0; i--) sprinkle();
+      for (let i = 0; i < 30 * 30; i++) step(1 / 30);
+    }
+    function layout() {
+      const root = document.querySelector(ROOT), bar = document.querySelector(BAR);
+      if (!root || !bar) return false;
+      const box = root.getBoundingClientRect(), gap = parseFloat(getComputedStyle(root).getPropertyValue("--panel-gap")) || 8;
+      const top = bar.getBoundingClientRect().bottom - box.top - gap, w = Math.round(box.width), h = Math.round(box.height - top);
+      if (w === W && h === H && canvas.parentElement === root) return false;
+      if (canvas.parentElement !== root) root.appendChild(canvas);
+      if (w === W && h === H) return false;
+      W = w; H = h;
+      canvas.style.top = `${top}px`;
+      canvas.style.height = `${H}px`;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.round(W * Math.min(2, dpr));
+      canvas.height = Math.round(H * Math.min(2, dpr));
+      P = Math.min(1.5, dpr);
+      allocate();
+      return true;
+    }
+    let frameId = 0, lastFrame = 0;
+    function loop(now) {
+      frameId = requestAnimationFrame(loop);
+      if (now - lastFrame < 15) return;
+      const dt = Math.min(0.05, (now - lastFrame) / 1000);
+      lastFrame = now;
+      step(dt);
+      render();
+    }
+    function stop() { cancelAnimationFrame(frameId); frameId = 0; }
+    function run() {
+      stop();
+      if (!cfg || document.hidden || gl.isContextLost()) return;
+      if (reduceMotion.matches) { render(); return; }
+      lastFrame = performance.now();
+      frameId = requestAnimationFrame(loop);
+    }
+    function restart() { if (cfg && W && H) { begin(); run(); } }
+    let current = null, resizeTimer = 0, started = false;
+    function placeCanvas() {
+      if (!cfg) return;
+      if (layout()) { clearTimeout(resizeTimer); resizeTimer = setTimeout(restart, 200); }
+    }
+    function sync(scene) {
+      if (scene !== current) {
+        current = scene;
+        cfg = WEATHER[scene] || null;
+        canvas.style.display = cfg ? "" : "none";
+        if (!cfg) { stop(); return; }
+        layout();
+        restart();
+        return;
+      }
+      if (cfg && reduceMotion.matches) render();
+    }
+    setupGL();
+    addEventListener("resize", placeCanvas);
+    setInterval(placeCanvas, 3000);
+    document.addEventListener("visibilitychange", run);
+    reduceMotion.addEventListener("change", run);
+    canvas.addEventListener("webglcontextlost", (event) => { event.preventDefault(); stop(); });
+    canvas.addEventListener("webglcontextrestored", () => { dropsLayer = fieldLayer = trackLayer = null; setupGL(); restart(); });
+    window.PureBlackWater = {
+      advance(seconds) { if (cfg) for (let i = Math.round(seconds * 30); i > 0; i--) step(1 / 30); },
+      render() { if (cfg) render(); },
+      get canvas() { return canvas; },
+      get stats() { return { drops: drops.length, running: drops.filter((d) => d.running).length, W, H, error: gl.getError() }; },
+      stop,
+    };
+    return { ok: true, sync };
+  }
+
   let sky = null;
+  let water = null;
   let previewHour = null;
 
   function update() {
@@ -978,6 +1578,7 @@
     const state = skyAt(hour, sun, sky ? sky.scene : "partly");
     apply(state);
     if (sky) sky.render(state);
+    if (sky && water) water.sync(sky.scene);
   }
 
   if (typeof document === "undefined") {
@@ -986,6 +1587,11 @@
     return;
   }
 
+  try {
+    water = startWater(() => (sky ? sky.stormStart : 0));
+  } catch (error) {
+    console.warn("PureBlack: water failed to start", error);
+  }
   try {
     sky = startSky(() => update());
   } catch (error) {

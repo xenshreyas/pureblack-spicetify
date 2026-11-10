@@ -187,6 +187,16 @@ img[src*="equaliser-green"] {
   animation-play-state: paused !important;
 }
 
+/* Rain on one sheet of glass over the whole app, below the top bar's capsule
+   (theme.js draws it). It sits above the search results so they get wet too. */
+#pb-water {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  z-index: 8;
+  pointer-events: none;
+}
+
 /* Weather on the glass (theme.js builds one .pb-glass in each panel and the
    playbar, above the content). Everything in it only moves or fades. */
 .pb-glass {

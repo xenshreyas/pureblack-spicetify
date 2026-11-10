@@ -12,8 +12,8 @@ A Spicetify theme for Spotify on macOS. Pure black with Apple-style liquid glass
 
   | Weather | What happens on the panels |
   |---|---|
-  | Rain, drizzle | Beads gather and dry; drops run down with trails |
-  | Thunderstorm | Lightning shows through every panel, in time with the top bar |
+  | Rain, drizzle | Real-looking water across the whole window: dense irregular drops that merge, run, stall and dry, leaving thin wet tracks |
+  | Thunderstorm | Heavier water, and lightning that shows through every panel and lights up every drop, in time with the top bar |
   | Snow | Flakes drift down; frost forms at the corners |
   | Clear or partly cloudy | A sun glint sweeps across; dust floats in the light (a moon glint at night) |
   | Fog | Mist drifts across the lower half |
@@ -27,7 +27,9 @@ A Spicetify theme for Spotify on macOS. Pure black with Apple-style liquid glass
 
 - `theme.js` works out the sunrise and sunset for your timezone's location (NOAA formula, coordinates from macOS's `zone.tab`). It then builds the sky colors for the current time and weather and sets them as CSS variables.
 - Weather comes from [Open-Meteo](https://open-meteo.com) (no API key), checked every 30 minutes and cached in `localStorage` under `pureblack:sky-weather`.
-- Clouds, beads, flakes and dust are drawn once into canvas tiles. After that, only `transform` and `opacity` animate, so nothing is redrawn every frame. Everything pauses while Spotify is hidden and respects Reduce Motion.
+- Clouds, flakes and dust are drawn once into canvas tiles. After that, only `transform` and `opacity` animate, so nothing is redrawn every frame.
+- Rain is a small water simulation drawn with WebGL2. Each drop works as a lens showing an upside-down image of the current sky. It only runs while it's raining. If WebGL2 isn't available, the theme falls back to simpler animated drops.
+- Everything pauses while Spotify is hidden and respects Reduce Motion.
 - Spotify paints its panel content solid black, so the sky wash is a screen-blended `::after`. The weather layer (`.pb-glass`) sits above the content and ignores clicks.
 
 ## Install with an agent

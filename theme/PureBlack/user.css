@@ -405,9 +405,12 @@ img[src*="equaliser-green"] {
    up with the panels below and the margins match the gaps between panels.
    The bar is 16px taller than Spotify's so the glass has 8px of padding
    around the 48px controls; theme.js tells macOS the new title bar height so
-   the traffic lights stay centered on it. */
+   the traffic lights stay centered on it. isolation keeps the glass layers
+   behind the controls, but it also traps the search results inside the bar,
+   so the bar itself has to sit above the panels and the playbar. */
 .EmXZMILXH0bP7U461Va6 {
   isolation: isolate;
+  z-index: var(--above-everything-grid-area-z-index, 7);
   height: calc(48px + 16px + var(--panel-gap, 8px) * 2);
   padding-inline: calc(var(--panel-gap, 8px) + 8px);
 }

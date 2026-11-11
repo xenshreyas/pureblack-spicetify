@@ -18,6 +18,8 @@ A Spicetify theme for Spotify on macOS. Pure black with Apple-style liquid glass
   | Clear or partly cloudy | A sun glint sweeps across; dust floats in the light (a moon glint at night) |
   | Fog | Mist drifts across the lower half |
 
+  ![Rain on the glass](docs/renders/rain.png)
+
 - **One source of color.** Buttons, chips, the progress bar and hovers follow the sky's color: blue on a clear day, steel grey in rain, rose at dusk, indigo at night.
 - **Details.** One radius scale everywhere, a taller top bar with the window buttons kept centred, a playbar glow that pulses while music plays, and Spotify's lyrics button opening Lyrics Plus.
 
@@ -86,4 +88,4 @@ Many selectors target Spotify's hashed class names (for example `.EmXZMILXH0bP7U
 | `auto-reapply/` | Reapply script and LaunchAgent template |
 | `AGENTS.md` | Step-by-step install guide for coding agents (`CLAUDE.md` points to it) |
 | `prototypes/` | Standalone HTML prototypes used to pick the design (open in a browser) |
-| `docs/renders/` | Renders of the theme in a mock Spotify layout |
+| `docs/renders/` | Renders of the theme in a mock Spotify layout (`tools/render.sh` re-renders them from the theme files) |

@@ -24,6 +24,13 @@ if [ "$1" = "--check-access" ]; then
   exit 1
 fi
 
+# A missing app is not an update to reapply: Spicetify can only fail against
+# it, so skip quietly instead of failing (and notifying) every 30 minutes.
+if [ ! -d "$APPS" ]; then
+  log "skipped: $APPS not found (Spotify moved, renamed or uninstalled)"
+  exit 0
+fi
+
 needs_reapply() { [ -f "$APPS/xpui.spa" ] || [ ! -d "$APPS/xpui" ]; }
 
 needs_reapply || exit 0

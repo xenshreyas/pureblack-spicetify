@@ -753,6 +753,14 @@ img[src*="equaliser-green"] {
   box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.08);
 }
 
+/* Home's chips row once you scroll: Spotify fills it with a color picked
+   from the page (often a loud pink). Keep the panel's own black, so the sky
+   wash over it looks the same as before scrolling. */
+.DaFzhRDyNpM9dr4DBTM9 {
+  --background-base: #000 !important;
+  background-color: #000 !important;
+}
+
 /* Menus, dropdowns, popovers and tooltips: liquid glass sheets. */
 .e-10860-overlay,
 .e-10860-legacy-overlay,
